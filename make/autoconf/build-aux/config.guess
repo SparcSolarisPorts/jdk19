@@ -28,65 +28,72 @@
 # autoconf system (which might easily get lost in a future update), we wrap it
 # and fix the broken property, if needed.
 
-DIR=`dirname $0`
-OUT=`. $DIR/autoconf-config.guess`
+DIR=`dirname "$0"`
+OUT=`. "$DIR/autoconf-config.guess"`
 
 # Detect C library.
-# Use '-gnu'  suffix on systems that use glibc.
+# Use '-gnu' suffix on systems that use glibc.
 # Use '-musl' suffix on systems that use the musl libc.
-echo $OUT | grep -- -linux- > /dev/null 2> /dev/null
+echo "$OUT" | grep -- -linux- > /dev/null 2> /dev/null
 if test $? = 0; then
   libc_vendor=`ldd --version 2>&1 | sed -n '1s/.*\(musl\).*/\1/p'`
   if [ x"${libc_vendor}" = x"musl" ]; then
-    OUT=`echo $OUT | sed 's/-gnu/-musl/'`
+    OUT=`echo "$OUT" | sed 's/-gnu/-musl/'`
   fi
 fi
 
-# Test and fix solaris on x86_64
-echo $OUT | grep i386-pc-solaris > /dev/null 2> /dev/null
-if test $? = 0; then
-  # isainfo -n returns either i386 or amd64
-  REAL_CPU=`isainfo -n`
-  OUT=$REAL_CPU`echo $OUT | sed -e 's/[^-]*//'`
-fi
+# Test and fix Solaris on x86_64 and SPARC V9.
+case "$OUT" in
+  i386-pc-solaris*)
+    # isainfo -n returns either i386 or amd64.
+    REAL_CPU=`isainfo -n 2>/dev/null`
+    case "$REAL_CPU" in
+      i386|amd64) OUT=$REAL_CPU`echo "$OUT" | sed -e 's/^[^-]*//'` ;;
+    esac
+    ;;
+  sparc-sun-solaris*|sparc-*-solaris*)
+    # On Solaris/SPARC, isainfo -n returns sparc or sparcv9.
+    # Preserve the vendor/OS portion of the autoconf result.
+    REAL_CPU=`isainfo -n 2>/dev/null`
+    case "$REAL_CPU" in
+      sparc|sparcv9) OUT=$REAL_CPU`echo "$OUT" | sed -e 's/^[^-]*//'` ;;
+    esac
+    ;;
+esac
 
 # Test and fix cygwin on x86_64
-echo $OUT | grep 86-pc-cygwin > /dev/null 2> /dev/null
+ echo "$OUT" | grep 86-pc-cygwin > /dev/null 2> /dev/null
 if test $? != 0; then
-  echo $OUT | grep 86-pc-mingw > /dev/null 2> /dev/null
+  echo "$OUT" | grep 86-pc-mingw > /dev/null 2> /dev/null
 fi
 if test $? = 0; then
-  case `echo $PROCESSOR_IDENTIFIER | cut -f1 -d' '` in
+  case `echo "$PROCESSOR_IDENTIFIER" | cut -f1 -d' '` in
     intel64|Intel64|INTEL64|em64t|EM64T|amd64|AMD64|8664|x86_64)
       REAL_CPU=x86_64
-      OUT=$REAL_CPU`echo $OUT | sed -e 's/[^-]*//'`
+      OUT=$REAL_CPU`echo "$OUT" | sed -e 's/^[^-]*//'`
       ;;
   esac
 fi
 
 # Test and fix wsl
-echo $OUT | grep unknown-linux-gnu > /dev/null 2> /dev/null
+echo "$OUT" | grep unknown-linux-gnu > /dev/null 2> /dev/null
 if test $? = 0; then
   uname -r | grep -i microsoft > /dev/null 2> /dev/null
   if test $? = 0; then
-    OUT=`echo $OUT | sed -e 's/unknown-linux-gnu/pc-wsl/'`
+    OUT=`echo "$OUT" | sed -e 's/unknown-linux-gnu/pc-wsl/'`
   fi
 fi
 
-# Test and fix architecture string on AIX
-# On AIX 'config.guess' returns 'powerpc' as architecture but 'powerpc' is
-# implicitly handled as 32-bit architecture in 'platform.m4' so we check
-# for the kernel mode rewrite it to 'powerpc64' if we'Re running in 64-bit mode.
-# The check could also be done with `/usr/sbin/prtconf | grep "Kernel Type" | grep "64-bit"`
-echo $OUT | grep powerpc-ibm-aix > /dev/null 2> /dev/null
+# Test and fix architecture string on AIX.
+echo "$OUT" | grep powerpc-ibm-aix > /dev/null 2> /dev/null
 if test $? = 0; then
   if [ -x /bin/getconf ] ; then
     KERNEL_BITMODE=`getconf KERNEL_BITMODE`
-    if  [ "$KERNEL_BITMODE" = "32" ]; then
+    if [ "$KERNEL_BITMODE" = "32" ]; then
       KERNEL_BITMODE=""
     fi
   fi
-  OUT=powerpc$KERNEL_BITMODE`echo $OUT | sed -e 's/[^-]*//'`
+  OUT=powerpc$KERNEL_BITMODE`echo "$OUT" | sed -e 's/^[^-]*//'`
 fi
 
 # Test and fix little endian PowerPC64.
@@ -129,22 +136,22 @@ if [ "x$OUT" = x ]; then
 fi
 
 # Test and fix cpu on macos-aarch64, uname -p reports arm, buildsys expects aarch64
-echo $OUT | grep arm-apple-darwin > /dev/null 2> /dev/null
+echo "$OUT" | grep arm-apple-darwin > /dev/null 2> /dev/null
 if test $? != 0; then
   # The GNU version of uname may be on the PATH which reports arm64 instead
-  echo $OUT | grep arm64-apple-darwin > /dev/null 2> /dev/null
+  echo "$OUT" | grep arm64-apple-darwin > /dev/null 2> /dev/null
 fi
 if test $? = 0; then
   if [ `uname -m` = arm64 ]; then
-    OUT=aarch64`echo $OUT | sed -e 's/[^-]*//'`
+    OUT=aarch64`echo "$OUT" | sed -e 's/^[^-]*//'`
   fi
 fi
 
 # Test and fix cpu on Macosx when C preprocessor is not on the path
-echo $OUT | grep i386-apple-darwin > /dev/null 2> /dev/null
+echo "$OUT" | grep i386-apple-darwin > /dev/null 2> /dev/null
 if test $? = 0; then
   REAL_CPU=`uname -m`
-  OUT=$REAL_CPU`echo $OUT | sed -e 's/[^-]*//'`
+  OUT=$REAL_CPU`echo "$OUT" | sed -e 's/^[^-]*//'`
 fi
 
-echo $OUT
+echo "$OUT"
