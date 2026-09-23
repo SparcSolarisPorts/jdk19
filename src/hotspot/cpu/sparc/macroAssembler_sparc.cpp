@@ -434,7 +434,6 @@ void MacroAssembler::set_last_Java_frame(Register last_java_sp, Register last_Ja
     st_ptr(last_Java_pc, pc_addr);
   }
 
-#ifdef ASSERT
   // Make sure that we have an odd stack
   Label StackOk;
   andcc(last_java_sp, 0x01, G0);
@@ -442,7 +441,6 @@ void MacroAssembler::set_last_Java_frame(Register last_java_sp, Register last_Ja
   delayed()->nop();
   STOP("Stack Not Biased in set_last_Java_frame");
   bind(StackOk);
-#endif // ASSERT
   assert( last_java_sp != G4_scratch, "bad register usage in set_last_Java_frame");
   add( last_java_sp, STACK_BIAS, G4_scratch );
   st_ptr(G4_scratch, G2_thread, JavaThread::last_Java_sp_offset());
