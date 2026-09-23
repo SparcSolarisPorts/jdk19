@@ -417,9 +417,7 @@ class Argument {
  public:
   enum {
     n_register_parameters = 6,          // only 6 registers may contain integer parameters
-    n_float_register_parameters = 16,   // Can have up to 16 floating registers
-    n_int_register_parameters_j = 6,    // Java integer arguments use I0-I5 / O0-O5
-    n_float_register_parameters_j = 8   // Java floating arguments use F0-F7
+    n_float_register_parameters = 16    // Can have up to 16 floating registers
   };
 
   // creation
