@@ -499,7 +499,7 @@ void os::Posix::print_rlimit_info(outputStream* st) {
   st->print("%d", sysconf(_SC_CHILD_MAX));
 
   print_rlimit(st, ", THREADS", RLIMIT_THREADS);
-#else
+#elif !defined(SOLARIS)
   print_rlimit(st, ", NPROC", RLIMIT_NPROC);
 #endif
 
@@ -515,6 +515,12 @@ void os::Posix::print_rlimit_info(outputStream* st) {
   // maximum number of bytes of memory that may be locked into RAM
   // (rounded down to the nearest  multiple of system pagesize)
   print_rlimit(st, ", MEMLOCK", RLIMIT_MEMLOCK, true);
+#endif
+
+#if defined(SOLARIS)
+  // maximum size of mapped address space of a process in bytes;
+  // if the limit is exceeded, mmap and brk fail
+  print_rlimit(st, ", VMEM", RLIMIT_VMEM, true);
 #endif
 
   // MacOS; The maximum size (in bytes) to which a process's resident set size may grow.
@@ -1212,7 +1218,8 @@ static void pthread_init_common(void) {
   if ((status = pthread_mutexattr_settype(_mutexAttr, PTHREAD_MUTEX_NORMAL)) != 0) {
     fatal("pthread_mutexattr_settype: %s", os::strerror(status));
   }
-  os::PlatformMutex::init();
+  // Solaris has it's own PlatformMutex, distinct from the one for POSIX.
+  NOT_SOLARIS(os::PlatformMutex::init();)
 }
 
 static int (*_pthread_condattr_setclock)(pthread_condattr_t *, clockid_t) = NULL;
@@ -1483,6 +1490,7 @@ struct tm* os::localtime_pd(const time_t* clock, struct tm*  res) {
 // Shared pthread_mutex/cond based PlatformEvent implementation.
 // Not currently usable by Solaris.
 
+#ifndef SOLARIS
 
 // PlatformEvent
 //
@@ -1910,6 +1918,8 @@ int os::PlatformMonitor::wait(jlong millis) {
     return OS_OK;
   }
 }
+
+#endif // !SOLARIS
 
 // Darwin has no "environ" in a dynamic library.
 #ifdef __APPLE__
