@@ -382,6 +382,7 @@ public:
   // Array mapping arguments to registers.  Argument 0 is usually the 'this'
   // pointer.  Registers can include stack-slots and regular registers.
   static void calling_convention( BasicType *, VMRegPair *, uint len, bool is_outgoing );
+  static void c_calling_convention(BasicType*, VMRegPair*, uint);
 
   // Convert a sig into a calling convention register layout
   // and find interesting things about it.
