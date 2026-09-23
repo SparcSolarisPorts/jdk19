@@ -35,6 +35,9 @@ class CodeBlob;
 class ImmutableOopMap;
 class VMRegImpl;
 typedef VMRegImpl* VMReg;
+#ifdef SPARC
+class SmallRegisterMap;
+#endif
 
 enum ChunkFrames { CompiledOnly, Mixed };
 
