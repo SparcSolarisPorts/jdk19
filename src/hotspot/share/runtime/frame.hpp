@@ -221,7 +221,7 @@ class frame {
   inline void interpreted_frame_oop_map(InterpreterOopMap* mask) const;
 
   // returns the sending frame
-  frame sender(RegisterMap* map) const;
+  inline frame sender(RegisterMap* map) const;
 
   bool safe_for_sender(JavaThread *thread);
 

@@ -1064,8 +1064,7 @@ void InterpreterMacroAssembler::remove_activation(
 
   bind(unlock);
   unlock_object(robj);
-  NOT_LP64(get_thread(rthread);)
-  dec_held_monitor_count(rthread);
+  dec_held_monitor_count();
 
   pop(state);
 
@@ -1111,8 +1110,7 @@ void InterpreterMacroAssembler::remove_activation(
       push(state);
       mov(robj, rmon);   // nop if robj and rmon are the same
       unlock_object(robj);
-      NOT_LP64(get_thread(rthread);)
-      dec_held_monitor_count(rthread);
+      dec_held_monitor_count();
       pop(state);
 
       if (install_monitor_exception) {
@@ -1127,7 +1125,7 @@ void InterpreterMacroAssembler::remove_activation(
 
     bind(loop);
     // check if current entry is used
-    cmpptr(Address(rmon, BasicObjectLock::obj_offset_in_bytes()), (int32_t) NULL);
+    cmpptr(Address(rmon, BasicObjectLock::obj_offset_in_bytes()), (int32_t) NULL_WORD);
     jcc(Assembler::notEqual, exception);
 
     addptr(rmon, entry_size); // otherwise advance to next entry
@@ -1173,7 +1171,7 @@ void InterpreterMacroAssembler::remove_activation(
   leave();                           // remove frame anchor
   pop(ret_addr);                     // get return address
   mov(rsp, rbx);                     // set sp to sender sp
-  pop_cont_fastpath(rthread);
+  pop_cont_fastpath();
 }
 
 void InterpreterMacroAssembler::get_method_counters(Register method,

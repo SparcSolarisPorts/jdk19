@@ -254,6 +254,8 @@ void Compile::print_statistics() {
     PhaseOutput::print_statistics();
     PhasePeephole::print_statistics();
     PhaseIdealLoop::print_statistics();
+    ConnectionGraph::print_statistics();
+    PhaseMacroExpand::print_statistics();
     if (xtty != NULL)  xtty->tail("statistics");
   }
   if (_intrinsic_hist_flags[as_int(vmIntrinsics::_none)] != 0) {
@@ -400,7 +402,7 @@ void Compile::remove_useless_node(Node* dead) {
 }
 
 // Disconnect all useless nodes by disconnecting those at the boundary.
-void Compile::remove_useless_nodes(Unique_Node_List &useful) {
+void Compile::disconnect_useless_nodes(Unique_Node_List &useful, Unique_Node_List* worklist) {
   uint next = 0;
   while (next < useful.size()) {
     Node *n = useful.at(next++);
@@ -423,7 +425,7 @@ void Compile::remove_useless_nodes(Unique_Node_List &useful) {
       }
     }
     if (n->outcnt() == 1 && n->has_special_unique_user()) {
-      record_for_igvn(n->unique_out());
+      worklist->push(n->unique_out());
     }
   }
 
@@ -433,6 +435,11 @@ void Compile::remove_useless_nodes(Unique_Node_List &useful) {
   remove_useless_nodes(_expensive_nodes,    useful); // remove useless expensive nodes
   remove_useless_nodes(_for_post_loop_igvn, useful); // remove useless node recorded for post loop opts IGVN pass
   remove_useless_coarsened_locks(useful);            // remove useless coarsened locks nodes
+#ifdef ASSERT
+  if (_modified_nodes != NULL) {
+    _modified_nodes->remove_useless_nodes(useful.member_set());
+  }
+#endif
 
   BarrierSetC2* bs = BarrierSet::barrier_set()->barrier_set_c2();
   bs->eliminate_useless_gc_barriers(useful, this);
@@ -3662,7 +3669,7 @@ void Compile::final_graph_reshaping_main_switch(Node* n, Final_Reshape_Counts& f
       n->set_req(MemBarNode::Precedent, top());
       while (wq.size() > 0) {
         Node* m = wq.pop();
-        if (m->outcnt() == 0) {
+        if (m->outcnt() == 0 && m != top()) {
           for (uint j = 0; j < m->req(); j++) {
             Node* in = m->in(j);
             if (in != NULL) {
@@ -3883,7 +3890,7 @@ bool Compile::final_graph_reshaping() {
       // 'fall-thru' path, so expected kids is 1 less.
       if (n->is_PCTable() && n->in(0) && n->in(0)->in(0)) {
         if (n->in(0)->in(0)->is_Call()) {
-          CallNode* call = n->in(0)->in(0)->as_Call();
+          CallNode *call = n->in(0)->in(0)->as_Call();
           if (call->entry_point() == OptoRuntime::rethrow_stub()) {
             required_outcnt--;      // Rethrow always has 1 less kid
           } else if (call->req() > TypeFunc::Parms &&
@@ -3892,25 +3899,22 @@ bool Compile::final_graph_reshaping() {
             // detected that the virtual call will always result in a null
             // pointer exception. The fall-through projection of this CatchNode
             // will not be populated.
-            Node* arg0 = call->in(TypeFunc::Parms);
+            Node *arg0 = call->in(TypeFunc::Parms);
             if (arg0->is_Type() &&
                 arg0->as_Type()->type()->higher_equal(TypePtr::NULL_PTR)) {
               required_outcnt--;
             }
-          } else if (call->entry_point() == OptoRuntime::new_array_Java() ||
-                     call->entry_point() == OptoRuntime::new_array_nozero_Java()) {
-            // Check for illegal array length. In such case, the optimizer has
+          } else if (call->entry_point() == OptoRuntime::new_array_Java() &&
+                     call->req() > TypeFunc::Parms+1 &&
+                     call->is_CallStaticJava()) {
+            // Check for negative array length. In such case, the optimizer has
             // detected that the allocation attempt will always result in an
             // exception. There is no fall-through projection of this CatchNode .
-            assert(call->is_CallStaticJava(), "static call expected");
-            assert(call->req() == call->jvms()->endoff() + 1, "missing extra input");
-            Node* valid_length_test = call->in(call->req()-1);
-            call->del_req(call->req()-1);
-            if (valid_length_test->find_int_con(1) == 0) {
+            Node *arg1 = call->in(TypeFunc::Parms+1);
+            if (arg1->is_Type() &&
+                arg1->as_Type()->type()->join(TypeInt::POS)->empty()) {
               required_outcnt--;
             }
-            assert(n->outcnt() == required_outcnt, "malformed control flow");
-            continue;
           }
         }
       }
@@ -3918,14 +3922,6 @@ bool Compile::final_graph_reshaping() {
       if (n->outcnt() != required_outcnt) {
         record_method_not_compilable("malformed control flow");
         return true;            // Not all targets reachable!
-      }
-    } else if (n->is_PCTable() && n->in(0) && n->in(0)->in(0) && n->in(0)->in(0)->is_Call()) {
-      CallNode* call = n->in(0)->in(0)->as_Call();
-      if (call->entry_point() == OptoRuntime::new_array_Java() ||
-          call->entry_point() == OptoRuntime::new_array_nozero_Java()) {
-        assert(call->is_CallStaticJava(), "static call expected");
-        assert(call->req() == call->jvms()->endoff() + 1, "missing extra input");
-        call->del_req(call->req()-1); // valid length test useless now
       }
     }
     // Check that I actually visited all kids.  Unreached kids

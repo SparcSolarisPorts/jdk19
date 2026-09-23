@@ -62,7 +62,7 @@ public:
 class JavaCallingConvention : public CallingConventionClosure {
 public:
   int calling_convention(BasicType* sig_bt, VMRegPair* regs, int num_args) const override {
-    return SharedRuntime::java_calling_convention(sig_bt, regs, num_args, false);
+    return SharedRuntime::java_calling_convention(sig_bt, regs, num_args);
   }
 };
 

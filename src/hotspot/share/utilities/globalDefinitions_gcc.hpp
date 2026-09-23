@@ -65,10 +65,6 @@
 #include <inttypes.h>
 #endif // SOLARIS
 
-# ifdef SOLARIS_MUTATOR_LIBTHREAD
-# include <sys/procfs.h>
-# endif
-
 #if defined(LINUX) || defined(_ALLBSD_SOURCE)
 #include <inttypes.h>
 #include <signal.h>

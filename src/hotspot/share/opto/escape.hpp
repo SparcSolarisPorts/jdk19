@@ -463,6 +463,9 @@ private:
   // Adjust scalar_replaceable state after Connection Graph is built.
   void adjust_scalar_replaceable_state(JavaObjectNode* jobj);
 
+  // Propagate NSR (Not scalar replaceable) state.
+  void find_scalar_replaceable_allocs(GrowableArray<JavaObjectNode*>& jobj_worklist);
+
   // Optimize ideal graph.
   void optimize_ideal_graph(GrowableArray<Node*>& ptr_cmp_worklist,
                             GrowableArray<MemBarStoreStoreNode*>& storestore_worklist);
@@ -636,7 +639,12 @@ public:
   bool add_final_edges_unsafe_access(Node* n, uint opcode);
 
 #ifndef PRODUCT
+  static int _no_escape_counter;
+  static int _arg_escape_counter;
+  static int _global_escape_counter;
   void dump(GrowableArray<PointsToNode*>& ptnodes_worklist);
+  static void print_statistics();
+  void escape_state_statistics(GrowableArray<JavaObjectNode*>& java_objects_worklist);
 #endif
 };
 

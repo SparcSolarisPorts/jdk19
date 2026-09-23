@@ -105,9 +105,7 @@ JVMFlag::Error AllocatePrefetchStepSizeConstraintFunc(intx value, bool verbose) 
 
 JVMFlag::Error AllocatePrefetchInstrConstraintFunc(intx value, bool verbose) {
   intx max_value = max_intx;
-#if defined(SPARC)
-  max_value = 1;
-#elif defined(X86)
+#if defined(X86)
   max_value = 3;
 #endif
   if (value < 0 || value > max_value) {
@@ -340,15 +338,6 @@ JVMFlag::Error InteriorEntryAlignmentConstraintFunc(intx value, bool verbose) {
     return JVMFlag::VIOLATES_CONSTRAINT;
   }
 
-#ifdef SPARC
-  if (InteriorEntryAlignment % relocInfo::addr_unit() != 0) {
-    JVMFlag::printError(verbose,
-                        "InteriorEntryAlignment (" INTX_FORMAT ") must be "
-                        "multiple of NOP size\n");
-    return JVMFlag::VIOLATES_CONSTRAINT;
-  }
-#endif
-
   if (!is_power_of_2(value)) {
      JVMFlag::printError(verbose,
                          "InteriorEntryAlignment (" INTX_FORMAT ") must be "
@@ -357,7 +346,7 @@ JVMFlag::Error InteriorEntryAlignmentConstraintFunc(intx value, bool verbose) {
    }
 
   int minimum_alignment = 16;
-#if defined(SPARC) || (defined(X86) && !defined(AMD64))
+#if defined(X86) && !defined(AMD64)
   minimum_alignment = 4;
 #elif defined(S390)
   minimum_alignment = 2;

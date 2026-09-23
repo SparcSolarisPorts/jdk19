@@ -185,8 +185,7 @@ const char* Abstract_VM_Version::jre_release_version() {
                  IA32_ONLY("x86")                \
                  IA64_ONLY("ia64")               \
                  S390_ONLY("s390")               \
-                 RISCV64_ONLY("riscv64")         \
-                 SPARC_ONLY("sparc")
+                 RISCV64_ONLY("riscv64")
 #endif // !ZERO
 #endif // !CPU
 

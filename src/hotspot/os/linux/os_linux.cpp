@@ -1747,10 +1747,10 @@ void * os::Linux::dlopen_helper(const char *filename, char *ebuf,
       ::strncpy(ebuf, error_report, ebuflen-1);
       ebuf[ebuflen-1]='\0';
     }
-    Events::log(NULL, "Loading shared library %s failed, %s", filename, error_report);
+    Events::log_dll_message(NULL, "Loading shared library %s failed, %s", filename, error_report);
     log_info(os)("shared library load of %s failed, %s", filename, error_report);
   } else {
-    Events::log(NULL, "Loaded shared library %s", filename);
+    Events::log_dll_message(NULL, "Loaded shared library %s", filename);
     log_info(os)("shared library load of %s was successful", filename);
   }
   return result;
@@ -4328,13 +4328,13 @@ static void check_pax(void) {
 #ifndef ZERO
   size_t size = os::Linux::page_size();
 
-  void* p = ::mmap(NULL, size, PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+  void* p = ::mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
   if (p == MAP_FAILED) {
     log_debug(os)("os_linux.cpp: check_pax: mmap failed (%s)" , os::strerror(errno));
     vm_exit_out_of_memory(size, OOM_MMAP_ERROR, "failed to allocate memory for PaX check.");
   }
 
-  int res = ::mprotect(p, size, PROT_WRITE|PROT_EXEC);
+  int res = ::mprotect(p, size, PROT_READ|PROT_WRITE|PROT_EXEC);
   if (res == -1) {
     log_debug(os)("os_linux.cpp: check_pax: mprotect failed (%s)" , os::strerror(errno));
     vm_exit_during_initialization(
@@ -4596,7 +4596,8 @@ static int _cpu_count(const cpu_set_t* cpus) {
 // dynamic check - see 6515172 for details.
 // If anything goes wrong we fallback to returning the number of online
 // processors - which can be greater than the number available to the process.
-int os::Linux::active_processor_count() {
+static int get_active_processor_count() {
+  // Note: keep this function, with its CPU_xx macros, *outside* the os namespace (see JDK-8289477).
   cpu_set_t cpus;  // can represent at most 1024 (CPU_SETSIZE) processors
   cpu_set_t* cpus_p = &cpus;
   int cpus_size = sizeof(cpu_set_t);
@@ -4666,6 +4667,10 @@ int os::Linux::active_processor_count() {
 
   assert(cpu_count > 0 && cpu_count <= os::processor_count(), "sanity check");
   return cpu_count;
+}
+
+int os::Linux::active_processor_count() {
+  return get_active_processor_count();
 }
 
 // Determine the active processor count from one of
