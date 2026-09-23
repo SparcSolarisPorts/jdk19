@@ -39,6 +39,9 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "runtime/sharedRuntime.hpp"
+#ifdef SPARC
+#include "cpu/sparc/macroAssembler_sparc.hpp"
+#endif
 #include "runtime/signature.hpp"
 #include "runtime/sharedRuntime.hpp"
 
