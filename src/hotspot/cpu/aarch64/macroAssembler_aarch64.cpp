@@ -619,23 +619,8 @@ address MacroAssembler::trampoline_call1(Address entry, CodeBuffer* cbuf, bool c
          || entry.rspec().type() == relocInfo::static_call_type
          || entry.rspec().type() == relocInfo::virtual_call_type, "wrong reloc type");
 
-  bool need_trampoline = far_branches();
-  if (!need_trampoline && entry.rspec().type() == relocInfo::runtime_call_type && !CodeCache::contains(entry.target())) {
-    // If it is a runtime call of an address outside small CodeCache,
-    // we need to check whether it is in range.
-    address target = entry.target();
-    assert(target < CodeCache::low_bound() || target >= CodeCache::high_bound(), "target is inside CodeCache");
-    // Case 1: -------T-------L====CodeCache====H-------
-    //                ^-------longest branch---|
-    // Case 2: -------L====CodeCache====H-------T-------
-    //                |-------longest branch ---^
-    address longest_branch_start = (target < CodeCache::low_bound()) ? CodeCache::high_bound() - NativeInstruction::instruction_size
-                                                                     : CodeCache::low_bound();
-    need_trampoline = !reachable_from_branch_at(longest_branch_start, target);
-  }
-
   // We need a trampoline if branches are far.
-  if (need_trampoline) {
+  if (far_branches()) {
     bool in_scratch_emit_size = false;
 #ifdef COMPILER2
     if (check_emit_size) {
@@ -658,7 +643,7 @@ address MacroAssembler::trampoline_call1(Address entry, CodeBuffer* cbuf, bool c
 
   if (cbuf) cbuf->set_insts_mark();
   relocate(entry.rspec());
-  if (!need_trampoline) {
+  if (!far_branches()) {
     bl(entry.target());
   } else {
     bl(pc());
@@ -723,7 +708,7 @@ void MacroAssembler::emit_static_call_stub() {
   isb();
   mov_metadata(rmethod, (Metadata*)NULL);
 
-  // Jump to the entry point of the c2i stub.
+  // Jump to the entry point of the i2c stub.
   movptr(rscratch1, 0);
   br(rscratch1);
 }
@@ -859,8 +844,6 @@ void MacroAssembler::post_call_nop() {
   InstructionMark im(this);
   relocate(post_call_nop_Relocation::spec());
   nop();
-  movk(zr, 0);
-  movk(zr, 0);
 }
 
 // these are no-ops overridden by InterpreterMacroAssembler
@@ -1140,7 +1123,7 @@ void MacroAssembler::check_klass_subtype_slow_path(Register sub_klass,
   if (!IS_A_TEMP(r2))    pushed_registers += r2;
   if (!IS_A_TEMP(r5))    pushed_registers += r5;
 
-  if (super_klass != r0) {
+  if (super_klass != r0 || UseCompressedOops) {
     if (!IS_A_TEMP(r0))   pushed_registers += r0;
   }
 
@@ -3370,7 +3353,7 @@ void MacroAssembler::kernel_crc32_using_crc32(Register crc, Register buf,
     crc32x(crc, crc, tmp2);
     crc32x(crc, crc, tmp3);
     br(Assembler::GE, CRC_by32_loop);
-    cmn(len, (u1)32);
+    cmn(len, 32);
     br(Assembler::NE, CRC_less32);
     b(L_exit);
 
@@ -3433,7 +3416,7 @@ void MacroAssembler::kernel_crc32_using_crc32(Register crc, Register buf,
 
     sub(len, len, 64);
     add(buf, buf, 8);
-    cmn(len, (u1)128);
+    cmn(len, 128);
     br(Assembler::NE, CRC_less64);
   BIND(L_exit);
     mvnw(crc, crc);
@@ -3667,7 +3650,7 @@ void MacroAssembler::kernel_crc32c_using_crc32c(Register crc, Register buf,
     crc32cx(crc, crc, tmp2);
     crc32cx(crc, crc, tmp3);
     br(Assembler::GE, CRC_by32_loop);
-    cmn(len, (u1)32);
+    cmn(len, 32);
     br(Assembler::NE, CRC_less32);
     b(L_exit);
 
@@ -3730,7 +3713,7 @@ void MacroAssembler::kernel_crc32c_using_crc32c(Register crc, Register buf,
 
     sub(len, len, 64);
     add(buf, buf, 8);
-    cmn(len, (u1)128);
+    cmn(len, 128);
     br(Assembler::NE, CRC_less64);
   BIND(L_exit);
 }

@@ -338,7 +338,7 @@ static const struct {
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// sun.misc.Signal and BREAK_SIGNAL support
+// sun.misc.Signal support
 
 void jdk_misc_signal_init() {
   // Initialize signal structures
@@ -560,6 +560,11 @@ int JVM_HANDLE_XXX_SIGNAL(int sig, siginfo_t* info,
                           void* ucVoid, int abort_if_unrecognized)
 {
   assert(info != NULL && ucVoid != NULL, "sanity");
+
+  if (sig == BREAK_SIGNAL) {
+    assert(!ReduceSignalUsage, "Should not happen with -Xrs/-XX:+ReduceSignalUsage");
+    return true; // ignore it
+  }
 
   // Note: it's not uncommon that JNI code uses signal/sigset to install,
   // then restore certain signal handler (e.g. to temporarily block SIGPIPE,
@@ -951,6 +956,21 @@ static bool get_signal_code_description(const siginfo_t* si, enum_sigcode_desc_t
 #if defined(IA64) && !defined(AIX)
     { SIGSEGV, SEGV_PSTKOVF, "SEGV_PSTKOVF", "Paragraph stack overflow" },
 #endif
+#if defined(__sparc) && defined(SOLARIS)
+// define Solaris Sparc M7 ADI SEGV signals
+#if !defined(SEGV_ACCADI)
+#define SEGV_ACCADI 3
+#endif
+    { SIGSEGV, SEGV_ACCADI,  "SEGV_ACCADI",  "ADI not enabled for mapped object." },
+#if !defined(SEGV_ACCDERR)
+#define SEGV_ACCDERR 4
+#endif
+    { SIGSEGV, SEGV_ACCDERR, "SEGV_ACCDERR", "ADI disrupting exception." },
+#if !defined(SEGV_ACCPERR)
+#define SEGV_ACCPERR 5
+#endif
+    { SIGSEGV, SEGV_ACCPERR, "SEGV_ACCPERR", "ADI precise exception." },
+#endif // defined(__sparc) && defined(SOLARIS)
     { SIGBUS,  BUS_ADRALN,   "BUS_ADRALN",   "Invalid address alignment." },
     { SIGBUS,  BUS_ADRERR,   "BUS_ADRERR",   "Nonexistent physical address." },
     { SIGBUS,  BUS_OBJERR,   "BUS_OBJERR",   "Object-specific hardware error." },
@@ -1206,7 +1226,7 @@ int os::get_signal_number(const char* signal_name) {
   return -1;
 }
 
-void set_signal_handler(int sig) {
+void set_signal_handler(int sig, bool do_check = true) {
   // Check for overwrite.
   struct sigaction oldAct;
   sigaction(sig, (struct sigaction*)NULL, &oldAct);
@@ -1249,9 +1269,10 @@ void set_signal_handler(int sig) {
 #endif
 
   // Save handler setup for possible later checking
-  vm_handlers.set(sig, &sigAct);
-
-  do_check_signal_periodically[sig] = true;
+  if (do_check) {
+    vm_handlers.set(sig, &sigAct);
+  }
+  do_check_signal_periodically[sig] = do_check;
 
   int ret = sigaction(sig, &sigAct, &oldAct);
   assert(ret == 0, "check");
@@ -1290,24 +1311,11 @@ void install_signal_handlers() {
   PPC64_ONLY(set_signal_handler(SIGTRAP);)
   set_signal_handler(SIGXFSZ);
   if (!ReduceSignalUsage) {
-    // Install BREAK_SIGNAL's handler in early initialization phase, in
-    // order to reduce the risk that an attach client accidentally forces
-    // HotSpot to quit prematurely.
-    // The actual work for handling BREAK_SIGNAL is performed by the Signal
-    // Dispatcher thread, which is created and started at a much later point,
-    // see os::initialize_jdk_signal_support(). Any BREAK_SIGNAL received
-    // before the Signal Dispatcher thread is started is queued up via the
-    // pending_signals[BREAK_SIGNAL] counter, and will be processed by the
-    // Signal Dispatcher thread in a delayed fashion.
-    //
-    // Also note that HotSpot does NOT support signal chaining for BREAK_SIGNAL.
-    // Applications that require a custom BREAK_SIGNAL handler should run with
-    // -XX:+ReduceSignalUsage. Otherwise if libjsig is used together with
-    // -XX:+ReduceSignalUsage, libjsig will prevent changing BREAK_SIGNAL's
-    // handler to a custom handler.
-    os::signal(BREAK_SIGNAL, os::user_handler());
+    // This is just for early initialization phase. Intercepting the signal here reduces the risk
+    // that an attach client accidentally forces HotSpot to quit prematurely. We skip the periodic
+    // check because late initialization will overwrite it to UserHandler.
+    set_signal_handler(BREAK_SIGNAL, false);
   }
-
 #if defined(__APPLE__)
   // lldb (gdb) installs both standard BSD signal handlers, and mach exception
   // handlers. By replacing the existing task exception handler, we disable lldb's mach
@@ -1797,12 +1805,12 @@ int PosixSignals::init() {
 
   signal_sets_init();
 
-  // Initialize data for jdk.internal.misc.Signal and BREAK_SIGNAL's handler.
+  install_signal_handlers();
+
+  // Initialize data for jdk.internal.misc.Signal
   if (!ReduceSignalUsage) {
     jdk_misc_signal_init();
   }
-
-  install_signal_handlers();
 
   return JNI_OK;
 }

@@ -123,7 +123,6 @@
 #include "services/attachListener.hpp"
 #include "services/management.hpp"
 #include "services/memTracker.hpp"
-#include "services/threadIdTable.hpp"
 #include "services/threadService.hpp"
 #include "utilities/align.hpp"
 #include "utilities/copy.hpp"
@@ -800,10 +799,6 @@ void JavaThread::set_threadOopHandles(oop p) {
 }
 
 oop JavaThread::threadObj() const {
-  Thread* current = Thread::current_or_null_safe();
-  assert(current != nullptr, "cannot be called by a detached thread");
-  guarantee(current != this || JavaThread::cast(current)->is_oop_safe(),
-            "current cannot touch oops after its GC barrier is detached.");
   return _threadObj.resolve();
 }
 
@@ -1235,11 +1230,10 @@ JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) : JavaThread
 
 JavaThread::~JavaThread() {
 
-  // Ask ServiceThread to release the OopHandles
+  // Ask ServiceThread to release the threadObj OopHandle
   ServiceThread::add_oop_handle_release(_threadObj);
   ServiceThread::add_oop_handle_release(_vthread);
   ServiceThread::add_oop_handle_release(_jvmti_vthread);
-  ServiceThread::add_oop_handle_release(_extentLocalCache);
 
   // Return the sleep event to the free list
   ParkEvent::Release(_SleepEvent);
@@ -1377,7 +1371,6 @@ static bool is_daemon(oop threadObj) {
 // cleanup_failed_attach_current_thread as well.
 void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
   assert(this == JavaThread::current(), "thread consistency check");
-  assert(!is_exiting(), "should not be exiting or terminated already");
 
   elapsedTimer _timer_exit_phase1;
   elapsedTimer _timer_exit_phase2;
@@ -1439,22 +1432,17 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
     if (JvmtiExport::should_post_thread_life()) {
       JvmtiExport::post_thread_end(this);
     }
+
+    // The careful dance between thread suspension and exit is handled here.
+    // Since we are in thread_in_vm state and suspension is done with handshakes,
+    // we can just put in the exiting state and it will be correctly handled.
+    set_terminated(_thread_exiting);
+
+    ThreadService::current_thread_exiting(this, is_daemon(threadObj()));
   } else {
+    assert(!is_terminated() && !is_exiting(), "must not be exiting");
     // before_exit() has already posted JVMTI THREAD_END events
   }
-
-  // Cleanup any pending async exception now since we cannot access oops after
-  // BarrierSet::barrier_set()->on_thread_detach() has been executed.
-  if (has_async_exception_condition()) {
-    handshake_state()->clean_async_exception_operation();
-  }
-
-  // The careful dance between thread suspension and exit is handled here.
-  // Since we are in thread_in_vm state and suspension is done with handshakes,
-  // we can just put in the exiting state and it will be correctly handled.
-  // Also, no more async exceptions will be added to the queue after this point.
-  set_terminated(_thread_exiting);
-  ThreadService::current_thread_exiting(this, is_daemon(threadObj()));
 
   if (log_is_enabled(Debug, os, thread, timer)) {
     _timer_exit_phase1.stop();
@@ -1547,8 +1535,7 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
   }
 #endif // INCLUDE_JVMCI
 
-  // Remove from list of active threads list, and notify VM thread if we are the last non-daemon thread.
-  // We call BarrierSet::barrier_set()->on_thread_detach() here so no touching of oops after this point.
+  // Remove from list of active threads list, and notify VM thread if we are the last non-daemon thread
   Threads::remove(this, daemon);
 
   if (log_is_enabled(Debug, os, thread, timer)) {
@@ -1718,9 +1705,8 @@ void JavaThread::handle_async_exception(oop java_throwable) {
 }
 
 void JavaThread::install_async_exception(AsyncExceptionHandshake* aeh) {
-  // Do not throw asynchronous exceptions against the compiler thread
-  // or if the thread is already exiting.
-  if (!can_call_java() || is_exiting()) {
+  // Do not throw asynchronous exceptions against the compiler thread.
+  if (!can_call_java()) {
     delete aeh;
     return;
   }
@@ -2155,15 +2141,9 @@ void JavaThread::print_name_on_error(outputStream* st, char *buf, int buflen) co
 // JavaThread::print() is that we can't grab lock or allocate memory.
 void JavaThread::print_on_error(outputStream* st, char *buf, int buflen) const {
   st->print("%s \"%s\"", type_name(), get_thread_name_string(buf, buflen));
-  Thread* current = Thread::current_or_null_safe();
-  assert(current != nullptr, "cannot be called by a detached thread");
-  if (!current->is_Java_thread() || JavaThread::cast(current)->is_oop_safe()) {
-    // Only access threadObj() if current thread is not a JavaThread
-    // or if it is a JavaThread that can safely access oops.
-    oop thread_obj = threadObj();
-    if (thread_obj != nullptr) {
-      if (java_lang_Thread::is_daemon(thread_obj)) st->print(" daemon");
-    }
+  oop thread_obj = threadObj();
+  if (thread_obj != NULL) {
+    if (java_lang_Thread::is_daemon(thread_obj)) st->print(" daemon");
   }
   st->print(" [");
   st->print("%s", _get_thread_state_name(_thread_state));
@@ -2222,43 +2202,23 @@ const char* JavaThread::name() const  {
 // descriptive string if there is no set name.
 const char* JavaThread::get_thread_name_string(char* buf, int buflen) const {
   const char* name_str;
-#ifdef ASSERT
-  Thread* current = Thread::current_or_null_safe();
-  assert(current != nullptr, "cannot be called by a detached thread");
-  if (!current->is_Java_thread() || JavaThread::cast(current)->is_oop_safe()) {
-    // Only access threadObj() if current thread is not a JavaThread
-    // or if it is a JavaThread that can safely access oops.
-#endif
-    oop thread_obj = threadObj();
-    if (thread_obj != NULL) {
-      oop name = java_lang_Thread::name(thread_obj);
-      if (name != NULL) {
-        if (buf == NULL) {
-          name_str = java_lang_String::as_utf8_string(name);
-        } else {
-          name_str = java_lang_String::as_utf8_string(name, buf, buflen);
-        }
-      } else if (is_attaching_via_jni()) { // workaround for 6412693 - see 6404306
-        name_str = "<no-name - thread is attaching>";
+  oop thread_obj = threadObj();
+  if (thread_obj != NULL) {
+    oop name = java_lang_Thread::name(thread_obj);
+    if (name != NULL) {
+      if (buf == NULL) {
+        name_str = java_lang_String::as_utf8_string(name);
       } else {
-        name_str = "<un-named>";
+        name_str = java_lang_String::as_utf8_string(name, buf, buflen);
       }
+    } else if (is_attaching_via_jni()) { // workaround for 6412693 - see 6404306
+      name_str = "<no-name - thread is attaching>";
     } else {
-      name_str = Thread::name();
+      name_str = "<un-named>";
     }
-#ifdef ASSERT
   } else {
-    // Current JavaThread has exited...
-    if (current == this) {
-      // ... and is asking about itself:
-      name_str = "<no-name - current JavaThread has exited>";
-    } else {
-      // ... and it can't safely determine this JavaThread's name so
-      // use the default thread name.
-      name_str = Thread::name();
-    }
+    name_str = Thread::name();
   }
-#endif
   assert(name_str != NULL, "unexpected NULL thread name");
   return name_str;
 }
@@ -3587,7 +3547,6 @@ jboolean Threads::is_supported_jni_version(jint version) {
   if (version == JNI_VERSION_1_8) return JNI_TRUE;
   if (version == JNI_VERSION_9) return JNI_TRUE;
   if (version == JNI_VERSION_10) return JNI_TRUE;
-  if (version == JNI_VERSION_19) return JNI_TRUE;
   return JNI_FALSE;
 }
 
@@ -3632,24 +3591,11 @@ void Threads::remove(JavaThread* p, bool is_daemon) {
   // that we do not remove thread without safepoint code notice
   { MonitorLocker ml(Threads_lock);
 
-    if (ThreadIdTable::is_initialized()) {
-      // This cleanup must be done before the current thread's GC barrier
-      // is detached since we need to touch the threadObj oop.
-      jlong tid = SharedRuntime::get_java_tid(p);
-      ThreadIdTable::remove_thread(tid);
-    }
-
     // BarrierSet state must be destroyed after the last thread transition
     // before the thread terminates. Thread transitions result in calls to
     // StackWatermarkSet::on_safepoint(), which performs GC processing,
     // requiring the GC state to be alive.
     BarrierSet::barrier_set()->on_thread_detach(p);
-    if (p->is_exiting()) {
-      // If we got here via JavaThread::exit(), then we remember that the
-      // thread's GC barrier has been detached. We don't do this when we get
-      // here from another path, e.g., cleanup_failed_attach_current_thread().
-      p->set_terminated(JavaThread::_thread_gc_barrier_detached);
-    }
 
     assert(ThreadsSMRSupport::get_java_thread_list()->includes(p), "p must be present");
 

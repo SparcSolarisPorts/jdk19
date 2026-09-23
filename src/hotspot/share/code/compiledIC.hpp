@@ -345,7 +345,6 @@ class CompiledStaticCall : public ResourceObj {
 
   // Compute entry point given a method
   static void compute_entry(const methodHandle& m, bool caller_is_nmethod, StaticCallInfo& info);
-  void compute_entry_for_continuation_entry(const methodHandle& m, StaticCallInfo& info);
 
 public:
   // Clean static call (will force resolving on next use)

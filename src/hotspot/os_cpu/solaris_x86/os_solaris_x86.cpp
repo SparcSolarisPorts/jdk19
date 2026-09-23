@@ -268,12 +268,76 @@ frame os::current_frame() {
   }
 }
 
+#ifndef AMD64
+
+// Detecting SSE support by OS
+// From solaris_i486.s
+extern "C" bool sse_check();
+extern "C" bool sse_unavailable();
+
+enum { SSE_UNKNOWN, SSE_NOT_SUPPORTED, SSE_SUPPORTED};
+static int sse_status = SSE_UNKNOWN;
+
+
+static void  check_for_sse_support() {
+  if (!VM_Version::supports_sse()) {
+    sse_status = SSE_NOT_SUPPORTED;
+    return;
+  }
+  // looking for _sse_hw in libc.so, if it does not exist or
+  // the value (int) is 0, OS has no support for SSE
+  int *sse_hwp;
+  void *h;
+
+  if ((h=dlopen("/usr/lib/libc.so", RTLD_LAZY)) == NULL) {
+    //open failed, presume no support for SSE
+    sse_status = SSE_NOT_SUPPORTED;
+    return;
+  }
+  if ((sse_hwp = (int *)dlsym(h, "_sse_hw")) == NULL) {
+    sse_status = SSE_NOT_SUPPORTED;
+  } else if (*sse_hwp == 0) {
+    sse_status = SSE_NOT_SUPPORTED;
+  }
+  dlclose(h);
+
+  if (sse_status == SSE_UNKNOWN) {
+    bool (*try_sse)() = (bool (*)())sse_check;
+    sse_status = (*try_sse)() ? SSE_SUPPORTED : SSE_NOT_SUPPORTED;
+  }
+
+}
+
+#endif // AMD64
+
 bool os::supports_sse() {
+#ifdef AMD64
   return true;
+#else
+  if (sse_status == SSE_UNKNOWN)
+    check_for_sse_support();
+  return sse_status == SSE_SUPPORTED;
+#endif // AMD64
 }
 
 bool os::is_allocatable(size_t bytes) {
+#ifdef AMD64
   return true;
+#else
+
+  if (bytes < 2 * G) {
+    return true;
+  }
+
+  char* addr = reserve_memory(bytes, NULL);
+
+  if (addr != NULL) {
+    release_memory(addr, bytes);
+  }
+
+  return addr != NULL;
+#endif // AMD64
+
 }
 
 juint os::cpu_microcode_revision() {
@@ -420,7 +484,7 @@ bool PosixSignals::pd_hotspot_signal_handler(int sig, siginfo_t* info,
   // Furthermore, a false-positive should be harmless.
   if (UnguardOnExecutionViolation > 0 &&
       (sig == SIGSEGV || sig == SIGBUS) &&
-      uc->uc_mcontext.gregs[REG32_TRAPNO] == T_PGFLT) {  // page fault
+      uc->uc_mcontext.gregs[TRAPNO] == T_PGFLT) {  // page fault
     int page_size = os::vm_page_size();
     address addr = (address) info->si_addr;
     address pc = (address) uc->uc_mcontext.gregs[REG_PC];

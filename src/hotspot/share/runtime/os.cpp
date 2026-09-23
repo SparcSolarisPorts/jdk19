@@ -474,6 +474,9 @@ void os::initialize_jdk_signal_support(TRAPS) {
     JavaThread::vm_exit_on_osthread_failure(thread);
 
     JavaThread::start_internal_daemon(THREAD, thread, thread_oop, NearMaxPriority);
+
+    // Handle ^BREAK
+    os::signal(SIGBREAK, os::user_handler());
   }
 }
 
@@ -654,11 +657,6 @@ void* os::malloc(size_t size, MEMFLAGS memflags, const NativeCallStack& stack) {
   }
 
   const size_t outer_size = size + MemTracker::overhead_per_malloc();
-
-  // Check for overflow.
-  if (outer_size < size) {
-    return NULL;
-  }
 
   void* const outer_ptr = ::malloc(outer_size);
   if (outer_ptr == NULL) {

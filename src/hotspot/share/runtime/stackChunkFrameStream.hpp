@@ -33,6 +33,7 @@
 
 class CodeBlob;
 class ImmutableOopMap;
+class SmallRegisterMap;
 class VMRegImpl;
 typedef VMRegImpl* VMReg;
 
@@ -44,6 +45,11 @@ private:
   intptr_t* _end;
   intptr_t* _sp;
   intptr_t* _unextended_sp; // used only when mixed
+#ifdef SPARC
+  // The younger register window supplies the saved values of this frame's
+  // outgoing registers.  SPARC stack chunks need to retain it while walking.
+  intptr_t* _pd_younger_sp;
+#endif
   CodeBlob* _cb;
   mutable const ImmutableOopMap* _oopmap;
 
@@ -57,7 +63,13 @@ private:
 #endif
 
 public:
-  StackChunkFrameStream() { NOT_PRODUCT(_chunk = nullptr; _index = -1;) DEBUG_ONLY(_has_stub = false;) }
+  StackChunkFrameStream() {
+#ifdef SPARC
+    _pd_younger_sp = nullptr;
+#endif
+    NOT_PRODUCT(_chunk = nullptr; _index = -1;)
+    DEBUG_ONLY(_has_stub = false;)
+  }
   inline StackChunkFrameStream(stackChunkOop chunk);
   inline StackChunkFrameStream(stackChunkOop chunk, const frame& f);
 
@@ -124,6 +136,11 @@ public:
 
   template <typename RegisterMapT>
   inline void* reg_to_loc(VMReg reg, const RegisterMapT* map) const;
+#ifdef SPARC
+  template <typename RegisterMapT>
+  inline void* reg_to_loc_pd(VMReg reg, const RegisterMapT* map) const;
+  inline void* reg_to_loc_pd(VMReg reg, const SmallRegisterMap* map) const;
+#endif
 
   void assert_is_interpreted_and_frame_type_mixed() const NOT_DEBUG_RETURN;
 

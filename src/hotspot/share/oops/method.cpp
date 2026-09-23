@@ -61,7 +61,6 @@
 #include "prims/methodHandles.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
-#include "runtime/continuationEntry.hpp"
 #include "runtime/frame.inline.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
@@ -1237,12 +1236,6 @@ void Method::link_method(const methodHandle& h_method, TRAPS) {
   (void) make_adapters(h_method, CHECK);
 
   // ONLY USE the h_method now as make_adapter may have blocked
-
-  if (h_method->is_continuation_enter_intrinsic()) {
-    // the entry points to this method will be set in set_code, called when first resolving this method
-    _from_interpreted_entry = NULL;
-    _from_compiled_entry = NULL;
-  }
 }
 
 address Method::make_adapters(const methodHandle& mh, TRAPS) {
@@ -1268,6 +1261,15 @@ address Method::make_adapters(const methodHandle& mh, TRAPS) {
 
 void Method::restore_unshareable_info(TRAPS) {
   assert(is_method() && is_valid_method(this), "ensure C++ vtable is restored");
+}
+
+address Method::from_compiled_entry_no_trampoline() const {
+  CompiledMethod *code = Atomic::load_acquire(&_code);
+  if (code) {
+    return code->verified_entry_point();
+  } else {
+    return adapter()->get_c2i_entry();
+  }
 }
 
 // The verified_code_entry() must be called when a invoke is resolved
@@ -1315,16 +1317,12 @@ void Method::set_code(const methodHandle& mh, CompiledMethod *code) {
   OrderAccess::storestore();
   mh->_from_compiled_entry = code->verified_entry_point();
   OrderAccess::storestore();
-
+  // Instantly compiled code can execute.
+  if (!mh->is_method_handle_intrinsic())
+    mh->_from_interpreted_entry = mh->get_i2c_entry();
   if (mh->is_continuation_enter_intrinsic()) {
-    assert(mh->_from_interpreted_entry == NULL, "initialized incorrectly"); // see link_method
-
-    // This is the entry used when we're in interpreter-only mode; see InterpreterMacroAssembler::jump_from_interpreted
-    mh->_i2i_entry = ContinuationEntry::interpreted_entry();
-    // This must come last, as it is what's tested in LinkResolver::resolve_static_call
-    Atomic::release_store(&mh->_from_interpreted_entry , mh->get_i2c_entry());
-  } else if (!mh->is_method_handle_intrinsic()) {
-    // Instantly compiled code can execute.
+    // this is the entry used when we're in interpreter-only mode; see InterpreterMacroAssembler::jump_from_interpreted
+    mh->_i2i_entry = mh->get_i2c_entry();
     mh->_from_interpreted_entry = mh->get_i2c_entry();
   }
 }

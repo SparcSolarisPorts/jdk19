@@ -1847,8 +1847,6 @@
   declare_c2_type(CopySignFNode, Node)                                    \
   declare_c2_type(SignumDNode, Node)                                      \
   declare_c2_type(SignumFNode, Node)                                      \
-  declare_c2_type(IsInfiniteFNode, Node)                                  \
-  declare_c2_type(IsInfiniteDNode, Node)                                  \
   declare_c2_type(LoadVectorGatherNode, LoadVectorNode)                   \
   declare_c2_type(StoreVectorScatterNode, StoreVectorNode)                \
   declare_c2_type(VectorLoadMaskNode, VectorNode)                         \
@@ -2054,6 +2052,12 @@
   /******************/                                                    \
                                                                           \
   declare_preprocessor_constant("ASSERT", DEBUG_ONLY(1) NOT_DEBUG(0))     \
+                                                                          \
+  /**************/                                                        \
+  /* Stack bias */                                                        \
+  /**************/                                                        \
+                                                                          \
+  declare_preprocessor_constant("STACK_BIAS", STACK_BIAS)                 \
                                                                           \
   /****************/                                                      \
   /* Object sizes */                                                      \

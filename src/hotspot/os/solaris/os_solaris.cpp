@@ -749,11 +749,11 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
 
   char buf[64];
   if (status == 0) {
-    log_info(os, thread)("Thread \"%s\" started (tid: " UINTX_FORMAT ", attributes: %s). ",
-      thread->name(), (uintx) tid, describe_thr_create_attributes(buf, sizeof(buf), stack_size, flags));
+    log_info(os, thread)("Thread started (tid: " UINTX_FORMAT ", attributes: %s). ",
+      (uintx) tid, describe_thr_create_attributes(buf, sizeof(buf), stack_size, flags));
   } else {
-    log_warning(os, thread)("Failed to start thread \"%s\" - thr_create failed (%s) for attributes: %s.",
-      thread->name(), os::errno_name(status), describe_thr_create_attributes(buf, sizeof(buf), stack_size, flags));
+    log_warning(os, thread)("Failed to start thread - thr_create failed (%s) for attributes: %s.",
+      os::errno_name(status), describe_thr_create_attributes(buf, sizeof(buf), stack_size, flags));
     // Log some OS information which might explain why creating the thread failed.
     log_info(os, thread)("Number of threads approx. running in the VM: %d", Threads::number_of_threads());
     LogStream st(Log(os, thread)::info());
@@ -1593,7 +1593,7 @@ size_t os::Solaris::page_size_for_alignment(size_t alignment) {
          SIZE_FORMAT " is not aligned to " SIZE_FORMAT,
          alignment, (size_t) vm_page_size());
 
-  const int page_sizes_max = 9;
+  int page_sizes_max = 9;
   size_t _illumos_page_sizes[page_sizes_max];
   int n = getpagesizes(_illumos_page_sizes, page_sizes_max);
   for (int i = 0; _illumos_page_sizes[i] != 0; i++) {
@@ -1975,7 +1975,7 @@ bool os::Solaris::mpss_sanity_check(bool warn, size_t* page_size) {
   }
 
   // Find the page sizes supported by the system
-  const int page_sizes_max = 9;
+  int page_sizes_max = 9;
   size_t _illumos_page_sizes[page_sizes_max];
   int n = getpagesizes(_illumos_page_sizes, page_sizes_max);
   assert(n > 0, "illumos bug?");
@@ -1990,7 +1990,7 @@ bool os::Solaris::mpss_sanity_check(bool warn, size_t* page_size) {
     if (_illumos_page_sizes[beg] <= size_limit) {
       _page_sizes.add(_illumos_page_sizes[beg]);
       if (_illumos_page_sizes[beg] > *page_size) {
-        *page_size = _illumos_page_sizes[beg];
+	*page_size = _illumos_page_sizes[beg];
       }
     }
   }
@@ -2122,7 +2122,7 @@ void os::naked_yield() {
 //
 // Assumptions:
 // +    We assume that all threads in the process belong to the same
-//              scheduling class.   IE. a homogeneous process.
+//              scheduling class.   IE. an homogenous process.
 // +    Must be root or in IA group to change change "interactive" attribute.
 //              Priocntl() will fail silently.  The only indication of failure is when
 //              we read-back the value and notice that it hasn't changed.
@@ -2483,8 +2483,8 @@ int set_lwp_class_and_priority(int ThreadID, int lwpid,
 //
 // ThreadPriorityPolicy=1
 // This mode causes the priority table to get filled with
-// linear values.  NormPriority gets mapped to 50% of the
-// Maximum priority and so on.  This will cause VM threads
+// linear values.  NormPriority get's mapped to 50% of the
+// Maximum priority an so on.  This will cause VM threads
 // to get unfair treatment against other Solaris processes
 // which do not explicitly alter their thread priorities.
 
@@ -2840,7 +2840,7 @@ jint os::init_2(void) {
   }
 
   // Calculate theoretical max. size of Threads to guard gainst
-  // artificial out-of-memory situations, where all available address-
+  // artifical out-of-memory situations, where all available address-
   // space has been reserved by thread stacks. Default stack size is 1Mb.
   size_t pre_thread_stack_size = (JavaThread::stack_size_at_create()) ?
     JavaThread::stack_size_at_create() : (1*K*K);
@@ -2857,7 +2857,7 @@ jint os::init_2(void) {
   // these functions registered and atexit() does not set errno. In Solaris
   // 8 and later, there is no limit to the number of functions registered
   // and atexit() sets errno. In addition, in Solaris 8 and later, atexit
-  // functions are called upon dlclose(3C) in addition to return from main
+  // functions are called upon dlclose(3DL) in addition to return from main
   // and exit(3C).
 
   if (PerfAllowAtExitRegistration) {

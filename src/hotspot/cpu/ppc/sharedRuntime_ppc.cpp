@@ -627,7 +627,8 @@ const int num_java_farg_registers = sizeof(java_farg_reg) / sizeof(java_farg_reg
 
 int SharedRuntime::java_calling_convention(const BasicType *sig_bt,
                                            VMRegPair *regs,
-                                           int total_args_passed) {
+                                           int total_args_passed,
+                                           int is_outgoing) {
   // C2c calling conventions for compiled-compiled calls.
   // Put 8 ints/longs into registers _AND_ 13 float/doubles into
   // registers _AND_ put the rest on the stack.
@@ -2351,10 +2352,6 @@ int Deoptimization::last_frame_adjust(int callee_parameters, int callee_locals) 
   return align_up((callee_locals - callee_parameters) * Interpreter::stackElementWords, frame::alignment_in_bytes);
 }
 
-uint SharedRuntime::in_preserve_stack_slots() {
-  return frame::jit_in_preserve_size / VMRegImpl::stack_slot_size;
-}
-
 uint SharedRuntime::out_preserve_stack_slots() {
 #if defined(COMPILER1) || defined(COMPILER2)
   return frame::jit_out_preserve_size / VMRegImpl::stack_slot_size;
@@ -2591,6 +2588,7 @@ void SharedRuntime::generate_deopt_blob() {
   // --------------------------------------------------------------------------
   __ BIND(exec_mode_initialized);
 
+  {
   const Register unroll_block_reg = R22_tmp2;
 
   // We need to set `last_Java_frame' because `fetch_unroll_info' will
@@ -2647,6 +2645,7 @@ void SharedRuntime::generate_deopt_blob() {
 
   // stack: (skeletal interpreter frame, ..., optional skeletal
   // interpreter frame, optional c2i, caller of deoptee, ...).
+  }
 
   // push an `unpack_frame' taking care of float / int return values.
   __ push_frame(frame_size_in_bytes, R0/*tmp*/);
@@ -2661,7 +2660,7 @@ void SharedRuntime::generate_deopt_blob() {
 
   // Let the unpacker layout information in the skeletal frames just
   // allocated.
-  __ calculate_address_from_global_toc(R3_RET, calls_return_pc, true, true, true, true);
+  __ get_PC_trash_LR(R3_RET);
   __ set_last_Java_frame(/*sp*/R1_SP, /*pc*/R3_RET);
   // This is a call to a LEAF method, so no oop map is required.
   __ call_VM_leaf(CAST_FROM_FN_PTR(address, Deoptimization::unpack_frames),
@@ -2713,7 +2712,6 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   Register unroll_block_reg = R21_tmp1;
   Register klass_index_reg  = R22_tmp2;
   Register unc_trap_reg     = R23_tmp3;
-  Register r_return_pc      = R27_tmp7;
 
   OopMapSet* oop_maps = new OopMapSet();
   int frame_size_in_bytes = frame::abi_reg_args_size;
@@ -2738,9 +2736,9 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   // sender frame as the deoptee frame.
   // Remember the offset of the instruction whose address will be
   // moved to R11_scratch1.
-  address gc_map_pc = __ pc();
-  __ calculate_address_from_global_toc(r_return_pc, gc_map_pc, true, true, true, true);
-  __ set_last_Java_frame(/*sp*/R1_SP, r_return_pc);
+  address gc_map_pc = __ get_PC_trash_LR(R11_scratch1);
+
+  __ set_last_Java_frame(/*sp*/R1_SP, /*pc*/R11_scratch1);
 
   __ mr(klass_index_reg, R3);
   __ li(R5_ARG3, Deoptimization::Unpack_uncommon_trap);
@@ -2796,7 +2794,8 @@ void SharedRuntime::generate_uncommon_trap_blob() {
   // ...).
 
   // Set the "unpack_frame" as last_Java_frame.
-  __ set_last_Java_frame(/*sp*/R1_SP, r_return_pc);
+  __ get_PC_trash_LR(R11_scratch1);
+  __ set_last_Java_frame(/*sp*/R1_SP, /*pc*/R11_scratch1);
 
   // Indicate it is the uncommon trap case.
   __ li(unc_trap_reg, Deoptimization::Unpack_uncommon_trap);

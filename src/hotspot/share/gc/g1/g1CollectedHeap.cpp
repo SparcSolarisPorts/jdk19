@@ -1336,13 +1336,13 @@ void G1CollectedHeap::shrink_helper(size_t shrink_bytes) {
   uint num_regions_removed = _hrm.shrink_by(num_regions_to_remove);
   size_t shrunk_bytes = num_regions_removed * HeapRegion::GrainBytes;
 
-  log_debug(gc, ergo, heap)("Shrink the heap. requested shrinking amount: " SIZE_FORMAT "B aligned shrinking amount: " SIZE_FORMAT "B actual amount shrunk: " SIZE_FORMAT "B",
+  log_debug(gc, ergo, heap)("Shrink the heap. requested shrinking amount: " SIZE_FORMAT "B aligned shrinking amount: " SIZE_FORMAT "B attempted shrinking amount: " SIZE_FORMAT "B",
                             shrink_bytes, aligned_shrink_bytes, shrunk_bytes);
   if (num_regions_removed > 0) {
     log_debug(gc, heap)("Uncommittable regions after shrink: %u", num_regions_removed);
     policy()->record_new_heap_size(num_regions());
   } else {
-    log_debug(gc, ergo, heap)("Did not shrink the heap (heap shrinking operation failed)");
+    log_debug(gc, ergo, heap)("Did not expand the heap (heap shrinking operation failed)");
   }
 }
 
@@ -2348,12 +2348,6 @@ void G1CollectedHeap::par_iterate_regions_array(HeapRegionClosure* cl,
 
 HeapWord* G1CollectedHeap::block_start(const void* addr) const {
   HeapRegion* hr = heap_region_containing(addr);
-  // The CollectedHeap API requires us to not fail for any given address within
-  // the heap. HeapRegion::block_start() has been optimized to not accept addresses
-  // outside of the allocated area.
-  if (addr >= hr->top()) {
-    return nullptr;
-  }
   return hr->block_start(addr);
 }
 

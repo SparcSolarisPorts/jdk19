@@ -1200,7 +1200,7 @@ static int patch_imm_in_li64(address branch, address target) {
   tmp_lower = (tmp_lower << 52) >> 52;
   tmp_upper -= tmp_lower;
   tmp_upper >>= 12;
-  // Load upper 32 bits. Upper = target[63:32], but if target[31] = 1 or (target[31:20] == 0x7ff && target[19] == 1),
+  // Load upper 32 bits. Upper = target[63:32], but if target[31] = 1 or (target[31:28] == 0x7ff && target[19] == 1),
   // upper = target[63:32] + 1.
   Assembler::patch(branch + 0,  31, 12, tmp_upper & 0xfffff);                       // Lui.
   Assembler::patch(branch + 4,  31, 20, tmp_lower & 0xfff);                         // Addi.
@@ -1632,20 +1632,19 @@ void MacroAssembler::orptr(Address adr, RegisterOrConstant src, Register tmp1, R
   sd(tmp1, adr);
 }
 
-void MacroAssembler::cmp_klass(Register oop, Register trial_klass, Register tmp1, Register tmp2, Label &L) {
-  assert_different_registers(oop, trial_klass, tmp1, tmp2);
+void MacroAssembler::cmp_klass(Register oop, Register trial_klass, Register tmp, Label &L) {
   if (UseCompressedClassPointers) {
-    lwu(tmp1, Address(oop, oopDesc::klass_offset_in_bytes()));
+      lwu(tmp, Address(oop, oopDesc::klass_offset_in_bytes()));
     if (CompressedKlassPointers::base() == NULL) {
-      slli(tmp1, tmp1, CompressedKlassPointers::shift());
-      beq(trial_klass, tmp1, L);
+      slli(tmp, tmp, CompressedKlassPointers::shift());
+      beq(trial_klass, tmp, L);
       return;
     }
-    decode_klass_not_null(tmp1, tmp2);
+    decode_klass_not_null(tmp);
   } else {
-    ld(tmp1, Address(oop, oopDesc::klass_offset_in_bytes()));
+    ld(tmp, Address(oop, oopDesc::klass_offset_in_bytes()));
   }
-  beq(trial_klass, tmp1, L);
+  beq(trial_klass, tmp, L);
 }
 
 // Move an oop into a register. immediate is true if we want
@@ -1825,22 +1824,20 @@ void MacroAssembler::encode_heap_oop(Register d, Register s) {
   }
 }
 
-void MacroAssembler::load_klass(Register dst, Register src, Register tmp) {
-  assert_different_registers(dst, tmp);
-  assert_different_registers(src, tmp);
+void MacroAssembler::load_klass(Register dst, Register src) {
   if (UseCompressedClassPointers) {
     lwu(dst, Address(src, oopDesc::klass_offset_in_bytes()));
-    decode_klass_not_null(dst, tmp);
+    decode_klass_not_null(dst);
   } else {
     ld(dst, Address(src, oopDesc::klass_offset_in_bytes()));
   }
 }
 
-void MacroAssembler::store_klass(Register dst, Register src, Register tmp) {
+void MacroAssembler::store_klass(Register dst, Register src) {
   // FIXME: Should this be a store release? concurrent gcs assumes
   // klass length is valid if klass field is not null.
   if (UseCompressedClassPointers) {
-    encode_klass_not_null(src, tmp);
+    encode_klass_not_null(src);
     sw(src, Address(dst, oopDesc::klass_offset_in_bytes()));
   } else {
     sd(src, Address(dst, oopDesc::klass_offset_in_bytes()));
@@ -1854,9 +1851,8 @@ void MacroAssembler::store_klass_gap(Register dst, Register src) {
   }
 }
 
-void MacroAssembler::decode_klass_not_null(Register r, Register tmp) {
-  assert_different_registers(r, tmp);
-  decode_klass_not_null(r, r, tmp);
+void  MacroAssembler::decode_klass_not_null(Register r) {
+  decode_klass_not_null(r, r);
 }
 
 void MacroAssembler::decode_klass_not_null(Register dst, Register src, Register tmp) {
@@ -1887,11 +1883,12 @@ void MacroAssembler::decode_klass_not_null(Register dst, Register src, Register 
   } else {
     add(dst, xbase, src);
   }
+
+  if (xbase == xheapbase) { reinit_heapbase(); }
 }
 
-void MacroAssembler::encode_klass_not_null(Register r, Register tmp) {
-  assert_different_registers(r, tmp);
-  encode_klass_not_null(r, r, tmp);
+void MacroAssembler::encode_klass_not_null(Register r) {
+  encode_klass_not_null(r, r);
 }
 
 void MacroAssembler::encode_klass_not_null(Register dst, Register src, Register tmp) {
@@ -1924,6 +1921,9 @@ void MacroAssembler::encode_klass_not_null(Register dst, Register src, Register 
   if (CompressedKlassPointers::shift() != 0) {
     assert(LogKlassAlignmentInBytes == CompressedKlassPointers::shift(), "decode alg wrong");
     srli(dst, dst, LogKlassAlignmentInBytes);
+  }
+  if (xbase == xheapbase) {
+    reinit_heapbase();
   }
 }
 
@@ -2624,7 +2624,7 @@ void MacroAssembler::check_klass_subtype_slow_path(Register sub_klass,
     pushed_registers += x15;
   }
 
-  if (super_klass != x10) {
+  if (super_klass != x10 || UseCompressedOops) {
     if (!IS_A_TEMP(x10)) {
       pushed_registers += x10;
     }

@@ -48,5 +48,12 @@
 private:
   bool pd_get_top_frame(frame* fr_addr, void* ucontext,
     bool isInJava);
+public:
+
+  // These routines are only used on cpu architectures that
+  // have separate register stacks (Itanium).
+  static bool register_stack_overflow() { return false; }
+  static void enable_register_stack_guard() {}
+  static void disable_register_stack_guard() {}
 
 #endif // OS_CPU_SOLARIS_X86_THREAD_SOLARIS_X86_HPP

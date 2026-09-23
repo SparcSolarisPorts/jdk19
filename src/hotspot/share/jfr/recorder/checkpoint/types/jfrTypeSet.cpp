@@ -197,9 +197,7 @@ static void set_serialized(const T* ptr) {
   assert(ptr != NULL, "invariant");
   SET_SERIALIZED(ptr);
   assert(IS_SERIALIZED(ptr), "invariant");
-  if (current_epoch()) {
-    CLEAR_THIS_EPOCH_CLEARED_BIT(ptr);
-  }
+  CLEAR_THIS_EPOCH_CLEARED_BIT(ptr);
 }
 
 /*
@@ -777,9 +775,7 @@ void set_serialized<Method>(MethodPtr method) {
   assert(method != NULL, "invariant");
   SET_METHOD_SERIALIZED(method);
   assert(IS_METHOD_SERIALIZED(method), "invariant");
-  if (current_epoch()) {
-    CLEAR_THIS_EPOCH_METHOD_CLEARED_BIT(method);
-  }
+  CLEAR_THIS_EPOCH_METHOD_CLEARED_BIT(method);
 }
 
 static int write_method(JfrCheckpointWriter* writer, MethodPtr method, bool leakp) {

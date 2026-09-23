@@ -1104,7 +1104,7 @@ typedef struct {
                     The following capability
                   </xsl:when>
                   <xsl:otherwise>
-                    The following capabilities
+                    One of the following capabilities
                   </xsl:otherwise>
                 </xsl:choose>
                 (as returned by <a href="#GetCapabilities"><code>GetCapabilities</code></a>)

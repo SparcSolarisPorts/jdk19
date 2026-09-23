@@ -3767,6 +3767,8 @@ frame %{
 
   stack_alignment(frame::alignment_in_bytes);
 
+  in_preserve_stack_slots((frame::jit_in_preserve_size / VMRegImpl::stack_slot_size));
+
   // Number of outgoing stack slots killed above the
   // out_preserve_stack_slots for calls to C. Supports the var-args
   // backing area for register parms.
@@ -3790,6 +3792,40 @@ frame %{
   //    I hardly dare to try myself.  However, I'm convinced it's in slot
   //    4 what apparently works and saves us some spills.
   return_addr(STACK 4);
+
+  // This is the body of the function
+  //
+  // void Matcher::calling_convention(OptoRegPair* sig, // array of ideal regs
+  //                                  uint length,      // length of array
+  //                                  bool is_outgoing)
+  //
+  // The `sig' array is to be updated. sig[j] represents the location
+  // of the j-th argument, either a register or a stack slot.
+
+  // Comment taken from x86_32.ad:
+  // Body of function which returns an integer array locating
+  // arguments either in registers or in stack slots. Passed an array
+  // of ideal registers called "sig" and a "length" count. Stack-slot
+  // offsets are based on outgoing arguments, i.e. a CALLER setting up
+  // arguments for a CALLEE. Incoming stack arguments are
+  // automatically biased by the preserve_stack_slots field above.
+  calling_convention %{
+    // No difference between ingoing/outgoing. Just pass false.
+    SharedRuntime::java_calling_convention(sig_bt, regs, length, false);
+  %}
+
+  // Comment taken from x86_32.ad:
+  // Body of function which returns an integer array locating
+  // arguments either in registers or in stack slots. Passed an array
+  // of ideal registers called "sig" and a "length" count. Stack-slot
+  // offsets are based on outgoing arguments, i.e. a CALLER setting up
+  // arguments for a CALLEE. Incoming stack arguments are
+  // automatically biased by the preserve_stack_slots field above.
+  c_calling_convention %{
+    // This is obviously always outgoing.
+    // C argument in register AND stack slot.
+    (void) SharedRuntime::c_calling_convention(sig_bt, regs, /*regs2=*/NULL, length);
+  %}
 
   // Location of native (C/C++) and interpreter return values. This
   // is specified to be the same as Java. In the 32-bit VM, long
@@ -14098,28 +14134,13 @@ instruct vsqrt2D_reg(vecX dst, vecX src) %{
 
 // Vector Population Count Instructions
 
-instruct vpopcnt_reg(vecX dst, vecX src) %{
+instruct vpopcnt4I_reg(vecX dst, vecX src) %{
   match(Set dst (PopCountVI src));
-  format %{ "VPOPCNT $dst,$src\t// pop count packed" %}
+  predicate(n->as_Vector()->length() == 4);
+  format %{ "VPOPCNTW $dst,$src\t// pop count packed4I" %}
   size(4);
   ins_encode %{
-    BasicType bt = Matcher::vector_element_basic_type(this);
-    switch (bt) {
-      case T_BYTE:
-        __ vpopcntb($dst$$VectorSRegister->to_vr(), $src$$VectorSRegister->to_vr());
-        break;
-      case T_SHORT:
-        __ vpopcnth($dst$$VectorSRegister->to_vr(), $src$$VectorSRegister->to_vr());
-        break;
-      case T_INT:
-        __ vpopcntw($dst$$VectorSRegister->to_vr(), $src$$VectorSRegister->to_vr());
-        break;
-      case T_LONG:
-        __ vpopcntd($dst$$VectorSRegister->to_vr(), $src$$VectorSRegister->to_vr());
-        break;
-      default:
-        ShouldNotReachHere();
-    }
+    __ vpopcntw($dst$$VectorSRegister->to_vr(), $src$$VectorSRegister->to_vr());
   %}
   ins_pipe(pipe_class_default);
 %}

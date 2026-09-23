@@ -30,6 +30,7 @@
 #include "runtime/continuation.hpp"
 #include "utilities/sizes.hpp"
 
+class nmethod;
 class RegisterMap;
 class OopMap;
 class JavaThread;
@@ -51,14 +52,12 @@ public:
 #endif
 
 public:
-  static int _return_pc_offset; // friend gen_continuation_enter
-  static void set_enter_code(CompiledMethod* cm, int interpreted_entry_offset);
-  static bool is_interpreted_call(address call_address);
+  static int return_pc_offset; // friend gen_continuation_enter
+  static void set_enter_nmethod(nmethod* nm); // friend SharedRuntime::generate_native_wrapper
 
 private:
-  static address _return_pc;
-  static CompiledMethod* _enter_special;
-  static int _interpreted_entry_offset;
+  static nmethod* continuation_enter;
+  static address return_pc;
 
 private:
   ContinuationEntry* _parent;
@@ -88,14 +87,9 @@ public:
   ContinuationEntry* parent() const { return _parent; }
   int parent_held_monitor_count() const { return _parent_held_monitor_count; }
 
-  static address entry_pc() { return _return_pc; }
+  static address entry_pc() { return return_pc; }
   intptr_t* entry_sp() const { return (intptr_t*)this; }
   intptr_t* entry_fp() const;
-
-  static address compiled_entry();
-  static address interpreted_entry();
-
-  static CompiledMethod* enter_special() { return _enter_special; }
 
   int argsize() const { return _argsize; }
   void set_argsize(int value) { _argsize = value; }
@@ -129,10 +123,14 @@ public:
   }
 
   inline oop cont_oop() const;
-  inline oop scope() const;
-  inline static oop cont_oop_or_null(const ContinuationEntry* ce);
+
+  oop scope()     const { return Continuation::continuation_scope(cont_oop()); }
 
   bool is_virtual_thread() const { return _flags != 0; }
+
+  static oop cont_oop_or_null(const ContinuationEntry* ce) {
+    return ce == nullptr ? nullptr : ce->cont_oop();
+  }
 
 #ifndef PRODUCT
   void describe(FrameValues& values, int frame_no) const {

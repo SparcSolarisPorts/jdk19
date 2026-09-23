@@ -156,19 +156,6 @@ inline intptr_t p2i(const volatile void* p) {
   return (intptr_t) p;
 }
 
-
-//----------------------------------------------------------------------------------------------------
-// Forbid the use of various C library functions.
-// Some of these have os:: replacements that should normally be used instead.
-// Others are considered security concerns, with preferred alternatives.
-
-FORBID_C_FUNCTION(void exit(int), "use os::exit");
-FORBID_C_FUNCTION(void _exit(int), "use os::exit");
-FORBID_C_FUNCTION(char* strerror(int), "use os::strerror");
-FORBID_C_FUNCTION(char* strtok(char*, const char*), "use strtok_r");
-FORBID_C_FUNCTION(int vsprintf(char*, const char*, va_list), "use os::vsnprintf");
-FORBID_C_FUNCTION(int vsnprintf(char*, size_t, const char*, va_list), "use os::vsnprintf");
-
 //----------------------------------------------------------------------------------------------------
 // Constants
 
@@ -892,6 +879,15 @@ class JavaValue {
  jshort get_jshort() const { return (jshort) (_value.i);}
 
 };
+
+
+#define STACK_BIAS      0
+// V9 Sparc CPU's running in 64 Bit mode use a stack bias of 7ff
+// in order to extend the reach of the stack pointer.
+#if defined(SPARC) && defined(_LP64)
+#undef STACK_BIAS
+#define STACK_BIAS      0x7ff
+#endif
 
 
 // TosState describes the top-of-stack state before and after the execution of

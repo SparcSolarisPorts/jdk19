@@ -1084,6 +1084,9 @@ void nmethod::fix_oop_relocations(address begin, address end, bool initialize_im
 
 static void install_post_call_nop_displacement(nmethod* nm, address pc) {
   NativePostCallNop* nop = nativePostCallNop_at((address) pc);
+  if (nop == NULL) {
+    return;
+  }
   intptr_t cbaddr = (intptr_t) nm;
   intptr_t offset = ((intptr_t) pc) - cbaddr;
 
@@ -3290,7 +3293,7 @@ void nmethod::print_nmethod_labels(outputStream* stream, address block_begin, bo
         assert(sig_index == sizeargs, "");
       }
       const char* spname = "sp"; // make arch-specific?
-      intptr_t out_preserve = SharedRuntime::java_calling_convention(sig_bt, regs, sizeargs);
+      intptr_t out_preserve = SharedRuntime::java_calling_convention(sig_bt, regs, sizeargs, false);
       int stack_slot_offset = this->frame_size() * wordSize;
       int tab1 = 14, tab2 = 24;
       int sig_index = 0;

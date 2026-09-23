@@ -996,9 +996,11 @@ JRT_ENTRY_NO_ASYNC(void, SharedRuntime::register_finalizer(JavaThread* current, 
 JRT_END
 
 jlong SharedRuntime::get_java_tid(Thread* thread) {
-  if (thread != NULL && thread->is_Java_thread()) {
-    oop obj = JavaThread::cast(thread)->threadObj();
-    return (obj == NULL) ? 0 : java_lang_Thread::thread_id(obj);
+  if (thread != NULL) {
+    if (thread->is_Java_thread()) {
+      oop obj = JavaThread::cast(thread)->threadObj();
+      return (obj == NULL) ? 0 : java_lang_Thread::thread_id(obj);
+    }
   }
   return 0;
 }
@@ -1343,9 +1345,6 @@ bool SharedRuntime::resolve_sub_helper_internal(methodHandle callee_method, cons
           return true; // skip patching for JVMCI
         }
         CompiledStaticCall* ssc = caller_nm->compiledStaticCall_before(caller_frame.pc());
-        if (is_nmethod && caller_nm->method()->is_continuation_enter_intrinsic()) {
-          ssc->compute_entry_for_continuation_entry(callee_method, static_call_info);
-        }
         if (ssc->is_clean()) ssc->set(static_call_info);
       }
     }
@@ -1560,32 +1559,10 @@ JRT_END
 // resolve a static call and patch code
 JRT_BLOCK_ENTRY(address, SharedRuntime::resolve_static_call_C(JavaThread* current ))
   methodHandle callee_method;
-  bool enter_special = false;
   JRT_BLOCK
     callee_method = SharedRuntime::resolve_helper(false, false, CHECK_NULL);
     current->set_vm_result_2(callee_method());
-
-    if (current->is_interp_only_mode()) {
-      RegisterMap reg_map(current, false);
-      frame stub_frame = current->last_frame();
-      assert(stub_frame.is_runtime_frame(), "must be a runtimeStub");
-      frame caller = stub_frame.sender(&reg_map);
-      enter_special = caller.cb() != NULL && caller.cb()->is_compiled()
-        && caller.cb()->as_compiled_method()->method()->is_continuation_enter_intrinsic();
-    }
   JRT_BLOCK_END
-
-  if (current->is_interp_only_mode() && enter_special) {
-    // enterSpecial is compiled and calls this method to resolve the call to Continuation::enter
-    // but in interp_only_mode we need to go to the interpreted entry
-    // The c2i won't patch in this mode -- see fixup_callers_callsite
-    //
-    // This should probably be done in all cases, not just enterSpecial (see JDK-8218403),
-    // but that's part of a larger fix, and the situation is worse for enterSpecial, as it has no
-    // interpreted version.
-    return callee_method->get_c2i_entry();
-  }
-
   // return compiled code entry point after potential safepoints
   assert(callee_method->verified_code_entry() != NULL, " Jump to zero!");
   return callee_method->verified_code_entry();
@@ -1939,7 +1916,8 @@ void SharedRuntime::check_member_name_argument_is_last_argument(const methodHand
   assert(member_arg_pos >= 0 && member_arg_pos < total_args_passed, "oob");
   assert(sig_bt[member_arg_pos] == T_OBJECT, "dispatch argument must be an object");
 
-  int comp_args_on_stack = java_calling_convention(sig_bt, regs_without_member_name, total_args_passed - 1);
+  const bool is_outgoing = method->is_method_handle_intrinsic();
+  int comp_args_on_stack = java_calling_convention(sig_bt, regs_without_member_name, total_args_passed - 1, is_outgoing);
 
   for (int i = 0; i < member_arg_pos; i++) {
     VMReg a =    regs_with_member_name[i].first();
@@ -1992,6 +1970,8 @@ JRT_LEAF(void, SharedRuntime::fixup_callers_callsite(Method* method, address cal
 
   AARCH64_PORT_ONLY(assert(pauth_ptr_is_raw(caller_pc), "should be raw"));
 
+  address entry_point = moop->from_compiled_entry_no_trampoline();
+
   // It's possible that deoptimization can occur at a call site which hasn't
   // been resolved yet, in which case this function will be called from
   // an nmethod that has been patched for deopt and we can ignore the
@@ -2002,16 +1982,8 @@ JRT_LEAF(void, SharedRuntime::fixup_callers_callsite(Method* method, address cal
   // "to interpreter" stub in order to load up the Method*. Don't
   // ask me how I know this...
 
-  // Result from nmethod::is_unloading is not stable across safepoints.
-  NoSafepointVerifier nsv;
-
-  CompiledMethod* callee = moop->code();
-  if (callee == NULL) {
-    return;
-  }
-
   CodeBlob* cb = CodeCache::find_blob(caller_pc);
-  if (cb == NULL || !cb->is_compiled() || callee->is_unloading()) {
+  if (cb == NULL || !cb->is_compiled() || entry_point == moop->get_c2i_entry()) {
     return;
   }
 
@@ -2021,9 +1993,6 @@ JRT_LEAF(void, SharedRuntime::fixup_callers_callsite(Method* method, address cal
 
   // Get the return PC for the passed caller PC.
   address return_pc = caller_pc + frame::pc_return_offset;
-
-  assert(!JavaThread::current()->is_interp_only_mode() || !nm->method()->is_continuation_enter_intrinsic()
-    || ContinuationEntry::is_interpreted_call(return_pc), "interp_only_mode but not in enterSpecial interpreted entry");
 
   // There is a benign race here. We could be attempting to patch to a compiled
   // entry point at the same time the callee is being deoptimized. If that is
@@ -2061,15 +2030,7 @@ JRT_LEAF(void, SharedRuntime::fixup_callers_callsite(Method* method, address cal
            typ != relocInfo::static_stub_type) {
         return;
       }
-      if (nm->method()->is_continuation_enter_intrinsic()) {
-        assert(ContinuationEntry::is_interpreted_call(call->instruction_address()) == JavaThread::current()->is_interp_only_mode(),
-          "mode: %d", JavaThread::current()->is_interp_only_mode());
-        if (ContinuationEntry::is_interpreted_call(call->instruction_address())) {
-          return;
-        }
-      }
       address destination = call->destination();
-      address entry_point = callee->verified_entry_point();
       if (should_fixup_call_destination(destination, entry_point, caller_pc, moop, cb)) {
         call->set_destination_mt_safe(entry_point);
       }
@@ -2947,7 +2908,7 @@ AdapterHandlerEntry* AdapterHandlerLibrary::create_adapter(AdapterBlob*& new_ada
   VMRegPair* regs = (total_args_passed <= 16) ? stack_regs : NEW_RESOURCE_ARRAY(VMRegPair, total_args_passed);
 
   // Get a description of the compiled java calling convention and the largest used (VMReg) stack slot usage
-  int comp_args_on_stack = SharedRuntime::java_calling_convention(sig_bt, regs, total_args_passed);
+  int comp_args_on_stack = SharedRuntime::java_calling_convention(sig_bt, regs, total_args_passed, false);
   BufferBlob* buf = buffer_blob(); // the temporary code buffer in CodeCache
   CodeBuffer buffer(buf);
   short buffer_locs[20];
@@ -3098,7 +3059,7 @@ void AdapterHandlerLibrary::create_native_wrapper(const methodHandle& method) {
       CodeBuffer buffer(buf);
 
       if (method->is_continuation_enter_intrinsic()) {
-        buffer.initialize_stubs_size(128);
+        buffer.initialize_stubs_size(64);
       }
 
       struct { double data[20]; } locs_buf;
@@ -3125,8 +3086,11 @@ void AdapterHandlerLibrary::create_native_wrapper(const methodHandle& method) {
       assert(si.slots() == total_args_passed, "");
       BasicType ret_type = si.return_type();
 
-      // Now get the compiled-Java arguments layout.
-      int comp_args_on_stack = SharedRuntime::java_calling_convention(sig_bt, regs, total_args_passed);
+      // Now get the compiled-Java layout as input (or output) arguments.
+      // NOTE: Stubs for compiled entry points of method handle intrinsics
+      // are just trampolines so the argument registers must be outgoing ones.
+      const bool is_outgoing = method->is_method_handle_intrinsic();
+      int comp_args_on_stack = SharedRuntime::java_calling_convention(sig_bt, regs, total_args_passed, is_outgoing);
 
       // Generate the compiled-to-native wrapper code
       nm = SharedRuntime::generate_native_wrapper(&_masm, method, compile_id, sig_bt, regs, ret_type);
@@ -3170,7 +3134,7 @@ void AdapterHandlerLibrary::create_native_wrapper(const methodHandle& method) {
 VMReg SharedRuntime::name_for_receiver() {
   VMRegPair regs;
   BasicType sig_bt = T_OBJECT;
-  (void) java_calling_convention(&sig_bt, &regs, 1);
+  (void) java_calling_convention(&sig_bt, &regs, 1, true);
   // Return argument 0 register.  In the LP64 build pointers
   // take 2 registers, but the VM wants only the 'main' name.
   return regs.first();
@@ -3201,7 +3165,7 @@ VMRegPair *SharedRuntime::find_callee_arguments(Symbol* sig, bool has_receiver, 
   assert(cnt < 256, "grow table size");
 
   int comp_args_on_stack;
-  comp_args_on_stack = java_calling_convention(sig_bt, regs, cnt);
+  comp_args_on_stack = java_calling_convention(sig_bt, regs, cnt, true);
 
   // the calling convention doesn't count out_preserve_stack_slots so
   // we must add that in to get "true" stack offsets.

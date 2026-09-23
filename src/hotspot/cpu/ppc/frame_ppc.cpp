@@ -219,6 +219,14 @@ frame frame::sender_for_interpreter_frame(RegisterMap *map) const {
   return frame(sender_sp(), sender_pc(), (intptr_t*)get_ijava_state()->sender_sp);
 }
 
+intptr_t* frame::compiled_sender_sp(CodeBlob* cb) const {
+  return sender_sp();
+}
+
+address* frame::compiled_sender_pc_addr(CodeBlob* cb) const {
+  return sender_pc_addr();
+}
+
 void frame::patch_pc(Thread* thread, address pc) {
   assert(_cb == CodeCache::find_blob(pc), "unexpected pc");
   address* pc_addr = (address*)&(own_abi()->lr);
@@ -394,8 +402,17 @@ intptr_t *frame::initial_deoptimization_info() {
 
 #ifndef PRODUCT
 // This is a generic constructor which is only used by pns() in debug.cpp.
-// fp is dropped and gets determined by backlink.
-frame::frame(void* sp, void* fp, void* pc) : frame((intptr_t*)sp, (address)pc) {}
+frame::frame(void* sp, void* fp, void* pc) : _sp((intptr_t*)sp),
+                                             _pc((address)pc),
+                                             _cb(NULL),
+                                             _oop_map(NULL),
+                                             _on_heap(false),
+                                             DEBUG_ONLY(_frame_index(-1) COMMA)
+                                             _unextended_sp((intptr_t*)sp),
+                                             _fp(NULL) {
+  setup(); // also sets _fp and adjusts _unextended_sp
+}
+
 #endif
 
 // Pointer beyond the "oldest/deepest" BasicObjectLock on stack.

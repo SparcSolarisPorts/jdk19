@@ -41,7 +41,6 @@
 #include "opto/phase.hpp"
 #include "opto/regmask.hpp"
 #include "runtime/deoptimization.hpp"
-#include "runtime/sharedRuntime.hpp"
 #include "runtime/timerTrace.hpp"
 #include "runtime/vmThread.hpp"
 #include "utilities/ticks.hpp"
@@ -945,7 +944,7 @@ class Compile : public Phase {
 
   void              identify_useful_nodes(Unique_Node_List &useful);
   void              update_dead_node_list(Unique_Node_List &useful);
-  void              disconnect_useless_nodes(Unique_Node_List &useful, Unique_Node_List* worklist);
+  void              remove_useless_nodes (Unique_Node_List &useful);
 
   void              remove_useless_node(Node* dead);
 
@@ -1071,16 +1070,14 @@ class Compile : public Phase {
   // Stack slots that may be unused by the calling convention but must
   // otherwise be preserved.  On Intel this includes the return address.
   // On PowerPC it includes the 4 words holding the old TOC & LR glue.
-  uint in_preserve_stack_slots() {
-    return SharedRuntime::in_preserve_stack_slots();
-  }
+  uint in_preserve_stack_slots();
 
   // "Top of Stack" slots that may be unused by the calling convention but must
   // otherwise be preserved.
   // On Intel these are not necessary and the value can be zero.
-  static uint out_preserve_stack_slots() {
-    return SharedRuntime::out_preserve_stack_slots();
-  }
+  // On Sparc this describes the words reserved for storing a register window
+  // when an interrupt occurs.
+  static uint out_preserve_stack_slots();
 
   // Number of outgoing stack slots killed above the out_preserve_stack_slots
   // for calls to C.  Supports the var-args backing area for register parms.

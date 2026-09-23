@@ -46,7 +46,7 @@
 
 // The attach mechanism on Solaris is implemented using the Doors IPC
 // mechanism. The first tool to attempt to attach causes the attach
-// listener thread to startup. This thread creates a door that is
+// listener thread to startup. This thread creats a door that is
 // associated with a function that enqueues an operation to the attach
 // listener. The door is attached to a file in the file system so that
 // client (tools) can locate it. To enqueue an operation to the VM the
@@ -333,7 +333,7 @@ extern "C" {
 
     // create a pair of connected sockets. Store the file descriptor
     // for one end in the operation and enqueue the operation. The
-    // file descriptor for the other end will be returned to the client.
+    // file descriptor for the other end wil be returned to the client.
     if (res == 0) {
       int s[2];
       if (socketpair(PF_UNIX, SOCK_STREAM, 0, s) < 0) {
@@ -434,7 +434,7 @@ int SolarisAttachListener::create_door() {
   if (dd >= 0) {
     set_door_descriptor(dd);
     set_door_path(door_path);
-    log_trace(attach)("door file %s created successfully", door_path);
+    log_trace(attach)("door file %s created succesfully", door_path);
   } else {
     // unable to create door, attach it to file, or rename file into place
     ::unlink(initial_path);

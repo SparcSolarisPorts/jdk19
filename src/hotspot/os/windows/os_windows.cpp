@@ -1507,7 +1507,7 @@ void * os::dll_load(const char *name, char *ebuf, int ebuflen) {
 
   void * result = LoadLibrary(name);
   if (result != NULL) {
-    Events::log_dll_message(NULL, "Loaded shared library %s", name);
+    Events::log(NULL, "Loaded shared library %s", name);
     // Recalculate pdb search path if a DLL was loaded successfully.
     SymbolEngine::recalc_search_path();
     log_info(os)("shared library load of %s was successful", name);
@@ -1518,7 +1518,7 @@ void * os::dll_load(const char *name, char *ebuf, int ebuflen) {
   // It may or may not be overwritten below (in the for loop and just above)
   lasterror(ebuf, (size_t) ebuflen);
   ebuf[ebuflen - 1] = '\0';
-  Events::log_dll_message(NULL, "Loading shared library %s failed, error code %lu", name, errcode);
+  Events::log(NULL, "Loading shared library %s failed, error code %lu", name, errcode);
   log_info(os)("shared library load of %s failed, error code %lu", name, errcode);
 
   if (errcode == ERROR_MOD_NOT_FOUND) {
@@ -1686,7 +1686,7 @@ void os::get_summary_os_info(char* buf, size_t buflen) {
 int os::vsnprintf(char* buf, size_t len, const char* fmt, va_list args) {
 #if _MSC_VER >= 1900
   // Starting with Visual Studio 2015, vsnprint is C99 compliant.
-  ALLOW_C_FUNCTION(::vsnprintf, int result = ::vsnprintf(buf, len, fmt, args);)
+  int result = ::vsnprintf(buf, len, fmt, args);
   // If an encoding error occurred (result < 0) then it's not clear
   // whether the buffer is NUL terminated, so ensure it is.
   if ((result < 0) && (len > 0)) {
@@ -2227,15 +2227,6 @@ static void jdk_misc_signal_init() {
 
   // Add a CTRL-C handler
   SetConsoleCtrlHandler(consoleHandler, TRUE);
-
-  // Initialize sigbreakHandler.
-  // The actual work for handling CTRL-BREAK is performed by the Signal
-  // Dispatcher thread, which is created and started at a much later point,
-  // see os::initialize_jdk_signal_support(). Any CTRL-BREAK received
-  // before the Signal Dispatcher thread is started is queued up via the
-  // pending_signals[SIGBREAK] counter, and will be processed by the
-  // Signal Dispatcher thread in a delayed fashion.
-  os::signal(SIGBREAK, os::user_handler());
 }
 
 void os::signal_notify(int sig) {
@@ -4148,9 +4139,9 @@ int os::win32::exit_process_or_thread(Ept what, int exit_code) {
   if (what == EPT_THREAD) {
     _endthreadex((unsigned)exit_code);
   } else if (what == EPT_PROCESS) {
-    ALLOW_C_FUNCTION(::exit, ::exit(exit_code);)
+    ::exit(exit_code);
   } else { // EPT_PROCESS_DIE
-    ALLOW_C_FUNCTION(::_exit, ::_exit(exit_code);)
+    ::_exit(exit_code);
   }
 
   // Should not reach here
@@ -4325,8 +4316,7 @@ jint os::init_2(void) {
 
   SymbolEngine::recalc_search_path();
 
-  // Initialize data for jdk.internal.misc.Signal, and install CTRL-C and
-  // CTRL-BREAK handlers.
+  // Initialize data for jdk.internal.misc.Signal
   if (!ReduceSignalUsage) {
     jdk_misc_signal_init();
   }
