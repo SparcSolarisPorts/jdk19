@@ -4166,6 +4166,20 @@ void ArchDesc::buildFrameMethods(FILE *fp_cpp) {
     fprintf(fp_cpp," return OptoReg::stack2reg(%s); }\n\n",
             _frame->_return_addr);
   }
+  // Java Stack Slot Preservation
+  fprintf(fp_cpp,"uint Compile::in_preserve_stack_slots() ");
+  fprintf(fp_cpp,"{ return %s; }\n\n", _frame->_in_preserve_slots);
+  // Top Of Stack Slot Preservation, for both Java and C
+  fprintf(fp_cpp,"uint Compile::out_preserve_stack_slots() ");
+  fprintf(fp_cpp,"{ return SharedRuntime::out_preserve_stack_slots(); }\n\n");
+  // Java Argument Position
+  fprintf(fp_cpp,"void Matcher::calling_convention(BasicType *sig_bt, VMRegPair *regs, uint length, bool is_outgoing) {\n");
+  fprintf(fp_cpp,"%s\n", _frame->_calling_convention);
+  fprintf(fp_cpp,"}\n\n");
+  // Native Argument Position
+  fprintf(fp_cpp,"void Matcher::c_calling_convention(BasicType *sig_bt, VMRegPair *regs, uint length) {\n");
+  fprintf(fp_cpp,"%s\n", _frame->_c_calling_convention);
+  fprintf(fp_cpp,"}\n\n");
   // varargs C out slots killed
   fprintf(fp_cpp,"uint Compile::varargs_C_out_slots_killed() const ");
   fprintf(fp_cpp,"{ return %s; }\n\n", _frame->_varargs_C_out_slots_killed);
