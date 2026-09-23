@@ -6868,6 +6868,17 @@ Node * LibraryCallKit::get_key_start_from_aescrypt_object(Node *aescrypt_object)
   return k_start;
 }
 
+//------------------------------get_original_key_start_from_aescrypt_object-----------------------
+Node * LibraryCallKit::get_original_key_start_from_aescrypt_object(Node *aescrypt_object) {
+  Node* objAESCryptKey = load_field_from_object(aescrypt_object, "lastKey", "[B", /*is_exact*/ false);
+  assert (objAESCryptKey != NULL, "wrong version of com.sun.crypto.provider.AESCrypt");
+  if (objAESCryptKey == NULL) return (Node *) NULL;
+
+  // now have the array, need to get the start address of the lastKey array
+  Node* original_k_start = array_element_address(objAESCryptKey, intcon(0), T_BYTE);
+  return original_k_start;
+}
+
 //----------------------------inline_cipherBlockChaining_AESCrypt_predicate----------------------------
 // Return node representing slow path of predicate check.
 // the pseudo code we want to emulate with this predicate is:
