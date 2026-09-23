@@ -237,6 +237,7 @@ void LIR_Op2::verify() const {
 
 LIR_OpBranch::LIR_OpBranch(LIR_Condition cond, BlockBegin* block)
   : LIR_Op2(lir_branch, cond, LIR_OprFact::illegalOpr, LIR_OprFact::illegalOpr, (CodeEmitInfo*)NULL)
+  , _type(T_ILLEGAL)
   , _label(block->label())
   , _block(block)
   , _ublock(NULL)
@@ -245,6 +246,7 @@ LIR_OpBranch::LIR_OpBranch(LIR_Condition cond, BlockBegin* block)
 
 LIR_OpBranch::LIR_OpBranch(LIR_Condition cond, CodeStub* stub) :
   LIR_Op2(lir_branch, cond, LIR_OprFact::illegalOpr, LIR_OprFact::illegalOpr, (CodeEmitInfo*)NULL)
+  , _type(T_ILLEGAL)
   , _label(stub->entry())
   , _block(NULL)
   , _ublock(NULL)
@@ -253,6 +255,35 @@ LIR_OpBranch::LIR_OpBranch(LIR_Condition cond, CodeStub* stub) :
 
 LIR_OpBranch::LIR_OpBranch(LIR_Condition cond, BlockBegin* block, BlockBegin* ublock)
   : LIR_Op2(lir_cond_float_branch, cond, LIR_OprFact::illegalOpr, LIR_OprFact::illegalOpr, (CodeEmitInfo*)NULL)
+  , _type(T_ILLEGAL)
+  , _label(block->label())
+  , _block(block)
+  , _ublock(ublock)
+  , _stub(NULL)
+{
+}
+
+LIR_OpBranch::LIR_OpBranch(LIR_Condition cond, BasicType type, BlockBegin* block)
+  : LIR_Op2(lir_branch, cond, LIR_OprFact::illegalOpr, LIR_OprFact::illegalOpr, (CodeEmitInfo*)NULL)
+  , _type(type)
+  , _label(block->label())
+  , _block(block)
+  , _ublock(NULL)
+  , _stub(NULL) {
+}
+
+LIR_OpBranch::LIR_OpBranch(LIR_Condition cond, BasicType type, CodeStub* stub) :
+  LIR_Op2(lir_branch, cond, LIR_OprFact::illegalOpr, LIR_OprFact::illegalOpr, (CodeEmitInfo*)NULL)
+  , _type(type)
+  , _label(stub->entry())
+  , _block(NULL)
+  , _ublock(NULL)
+  , _stub(stub) {
+}
+
+LIR_OpBranch::LIR_OpBranch(LIR_Condition cond, BasicType type, BlockBegin* block, BlockBegin* ublock)
+  : LIR_Op2(lir_cond_float_branch, cond, LIR_OprFact::illegalOpr, LIR_OprFact::illegalOpr, (CodeEmitInfo*)NULL)
+  , _type(type)
   , _label(block->label())
   , _block(block)
   , _ublock(ublock)

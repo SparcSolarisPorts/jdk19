@@ -1697,6 +1697,7 @@ class LIR_OpBranch: public LIR_Op2 {
  friend class LIR_OpVisitState;
 
  private:
+  BasicType     _type;
   Label*        _label;
   BlockBegin*   _block;  // if this is a branch to a block, this is the block
   BlockBegin*   _ublock; // if this is a float-branch, this is the unordered block
@@ -1705,6 +1706,15 @@ class LIR_OpBranch: public LIR_Op2 {
  public:
   LIR_OpBranch(LIR_Condition cond, Label* lbl)
     : LIR_Op2(lir_branch, cond, LIR_OprFact::illegalOpr, LIR_OprFact::illegalOpr, (CodeEmitInfo*) NULL)
+    , _type(T_ILLEGAL)
+    , _label(lbl)
+    , _block(NULL)
+    , _ublock(NULL)
+    , _stub(NULL) { }
+
+  LIR_OpBranch(LIR_Condition cond, BasicType type, Label* lbl)
+    : LIR_Op2(lir_branch, cond, LIR_OprFact::illegalOpr, LIR_OprFact::illegalOpr, (CodeEmitInfo*) NULL)
+    , _type(type)
     , _label(lbl)
     , _block(NULL)
     , _ublock(NULL)
@@ -1712,9 +1722,14 @@ class LIR_OpBranch: public LIR_Op2 {
 
   LIR_OpBranch(LIR_Condition cond, BlockBegin* block);
   LIR_OpBranch(LIR_Condition cond, CodeStub* stub);
+  LIR_OpBranch(LIR_Condition cond, BasicType type, BlockBegin* block);
+  LIR_OpBranch(LIR_Condition cond, BasicType type, CodeStub* stub);
 
   // for unordered comparisons
   LIR_OpBranch(LIR_Condition cond, BlockBegin* block, BlockBegin* ublock);
+  LIR_OpBranch(LIR_Condition cond, BasicType type, BlockBegin* block, BlockBegin* ublock);
+
+  BasicType     type() const { return _type; }
 
   LIR_Condition cond() const {
     return condition();
@@ -1926,7 +1941,7 @@ class LIR_OpDelay: public LIR_Op {
   LIR_OpDelay(LIR_Op* op, CodeEmitInfo* info):
     LIR_Op(lir_delay_slot, LIR_OprFact::illegalOpr, info),
     _op(op) {
-    assert(op->code() == lir_nop, "should be filling with nops");
+    NOT_SPARC(assert(op->code() == lir_nop, "should be filling with nops");)
   }
   virtual void emit_code(LIR_Assembler* masm);
   virtual LIR_OpDelay* as_OpDelay() { return this; }
@@ -2327,6 +2342,11 @@ class LIR_List: public CompilationResourceObj {
   void branch(LIR_Condition cond, BlockBegin* block, BlockBegin* unordered) {
     append(new LIR_OpBranch(cond, block, unordered));
   }
+  // Typed branch overloads used by the SPARC C1 backend.
+  void branch(LIR_Condition cond, BasicType type, Label* lbl) { append(new LIR_OpBranch(cond, type, lbl)); }
+  void branch(LIR_Condition cond, BasicType type, BlockBegin* block) { append(new LIR_OpBranch(cond, type, block)); }
+  void branch(LIR_Condition cond, BasicType type, CodeStub* stub) { append(new LIR_OpBranch(cond, type, stub)); }
+  void branch(LIR_Condition cond, BasicType type, BlockBegin* block, BlockBegin* unordered) { append(new LIR_OpBranch(cond, type, block, unordered)); }
 
   void shift_left(LIR_Opr value, LIR_Opr count, LIR_Opr dst, LIR_Opr tmp);
   void shift_right(LIR_Opr value, LIR_Opr count, LIR_Opr dst, LIR_Opr tmp);

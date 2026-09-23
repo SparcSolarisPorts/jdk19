@@ -723,7 +723,13 @@ void ArchDesc::build_pipe_classes(FILE *fp_cpp) {
   if (!_pipeline)
     /* Do Nothing */;
 
-  else if (_pipeline->_maxcycleused <= 32) {
+  else if (_pipeline->_maxcycleused <=
+#ifdef SPARC
+    64
+#else
+    32
+#endif
+      ) {
     fprintf(fp_cpp, "Pipeline_Use_Cycle_Mask operator&(const Pipeline_Use_Cycle_Mask &in1, const Pipeline_Use_Cycle_Mask &in2) {\n");
     fprintf(fp_cpp, "  return Pipeline_Use_Cycle_Mask(in1._mask & in2._mask);\n");
     fprintf(fp_cpp, "}\n\n");
