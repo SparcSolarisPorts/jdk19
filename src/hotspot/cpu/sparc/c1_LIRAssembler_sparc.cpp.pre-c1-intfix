@@ -542,10 +542,6 @@ void LIR_Assembler::emit_op3(LIR_Op3* op) {
       assert(Assembler::is_simm13(divisor), "can only handle simm13");
       __ sdivx(Rdividend, divisor, Rresult);
     }
-    // C1 represents Java ints in 64-bit SPARC registers.  Keep the upper
-    // half canonical after arithmetic so later address/index operations do
-    // not accidentally consume a 64-bit result (notably MIN_VALUE / -1).
-    __ sra(Rresult, 0, Rresult);
   } else {
     if (Rdivisor != noreg) {
       __ sdivx(Rdividend, Rdivisor, Rscratch);
@@ -556,7 +552,6 @@ void LIR_Assembler::emit_op3(LIR_Op3* op) {
       __ mulx(Rscratch, divisor, Rscratch);
     }
     __ sub(Rdividend, Rscratch, Rresult);
-    __ sra(Rresult, 0, Rresult);
   }
 }
 
@@ -1341,14 +1336,8 @@ void LIR_Assembler::reg2reg(LIR_Opr from_reg, LIR_Opr to_reg) {
       // int to int moves
       __ mov(from_reg->as_register(), to_reg->as_register_lo());
     } else {
-      // Keep Java int values canonical in the 64-bit register file.
-      // A plain MOV preserves stale/overflowed upper bits from earlier C1
-      // arithmetic, which can later leak into address/index calculations.
-      if (to_reg->type() == T_INT) {
-        __ sra(from_reg->as_register(), 0, to_reg->as_register());
-      } else {
-        __ mov(from_reg->as_register(), to_reg->as_register());
-      }
+      // int to int moves
+      __ mov(from_reg->as_register(), to_reg->as_register());
     }
   } else {
     ShouldNotReachHere();
@@ -1688,13 +1677,6 @@ void LIR_Assembler::arith_op(LIR_Code code, LIR_Opr left, LIR_Opr right, LIR_Opr
         case lir_mul:  __ mulx (lreg, rreg, res); break;
         default: ShouldNotReachHere();
       }
-      // ADD/SUB/MULX are 64-bit operations on SPARC V9.  Java int
-      // arithmetic must wrap to 32 bits.  C2 tracks this explicitly, but
-      // C1 can otherwise leave non-canonical high bits which later become
-      // visible when an int is reused as an index/offset or by switch code.
-      if (dest->type() == T_INT) {
-        __ sra(res, 0, res);
-      }
     }
   } else {
     assert (right->is_constant(), "must be constant");
@@ -1709,9 +1691,6 @@ void LIR_Assembler::arith_op(LIR_Code code, LIR_Opr left, LIR_Opr right, LIR_Opr
         case lir_sub:  __ sub  (lreg, simm13, res); break;
         case lir_mul:  __ mulx (lreg, simm13, res); break;
         default: ShouldNotReachHere();
-      }
-      if (dest->type() == T_INT) {
-        __ sra(res, 0, res);
       }
     } else {
       Register lreg = left->as_pointer_register();
@@ -1768,9 +1747,6 @@ void LIR_Assembler::logic_op(LIR_Code code, LIR_Opr left, LIR_Opr right, LIR_Opr
         case lir_logic_xor:   __ xor3 (left->as_register(), simm13, dest->as_register()); break;
         default: ShouldNotReachHere();
       }
-      if (dest->type() == T_INT) {
-        __ sra(dest->as_register(), 0, dest->as_register());
-      }
     } else {
       long c = right->as_constant_ptr()->as_jlong();
       assert(c == (int)c && Assembler::is_simm13(c), "out of range");
@@ -1800,9 +1776,6 @@ void LIR_Assembler::logic_op(LIR_Code code, LIR_Opr left, LIR_Opr right, LIR_Opr
         case lir_logic_or:    __ or3  (left->as_register(), right->as_register(), dest->as_register()); break;
         case lir_logic_xor:   __ xor3 (left->as_register(), right->as_register(), dest->as_register()); break;
         default: ShouldNotReachHere();
-      }
-      if (dest->type() == T_INT) {
-        __ sra(dest->as_register(), 0, dest->as_register());
       }
     } else {
       Register l = (left->is_single_cpu() && left->is_oop_register()) ? left->as_register() :
