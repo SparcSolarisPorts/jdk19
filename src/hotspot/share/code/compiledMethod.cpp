@@ -427,7 +427,12 @@ Method* CompiledMethod::attached_method_before_pc(address pc) {
   return NULL; // not a call
 }
 
-void CompiledMethod::clear_inline_caches() {
+void CompiledMethod::clear_inline_caches()
+{
+#ifdef SPARC
+  tty->print_cr("[SPARC-DIAG-EXT] clear_inline_caches thread=%" UINTX_FORMAT, os::current_thread_id());
+#endif
+ {
 #ifdef SPARC
   tty->print_cr("[SPARC-DIAG] clear_inline_caches state=%d thread=%" UINTX_FORMAT,
                 get_state(), os::current_thread_id());

@@ -917,6 +917,9 @@ class DeoptimizeMarkedClosure : public HandshakeClosure {
 };
 
 void Deoptimization::deoptimize_all_marked(nmethod* nmethod_only) {
+#ifdef SPARC
+  tty->print_cr("[SPARC-DIAG-EXT] deoptimize_all_marked nmethod=%p thread=%" UINTX_FORMAT, nmethod_only, os::current_thread_id());
+#endif
   ResourceMark rm;
   DeoptimizationMarker dm;
 
