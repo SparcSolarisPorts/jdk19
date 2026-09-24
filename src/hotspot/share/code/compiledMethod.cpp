@@ -428,10 +428,6 @@ Method* CompiledMethod::attached_method_before_pc(address pc) {
 }
 
 void CompiledMethod::clear_inline_caches() {
-#ifdef SPARC
-  tty->print_cr("[SPARC-DIAG] clear_inline_caches state=%d thread=%" UINTX_FORMAT,
-                get_state(), os::current_thread_id());
-#endif
   assert(SafepointSynchronize::is_at_safepoint(), "cleaning of IC's only allowed at safepoint");
   if (is_zombie()) {
     return;
