@@ -1417,6 +1417,11 @@ void nmethod::unlink_from_method() {
  * Common functionality for both make_not_entrant and make_zombie
  */
 bool nmethod::make_not_entrant_or_zombie(int state) {
+#ifdef SPARC
+  tty->print_cr("[SPARC-TIER] invalidate %s state=%d level=%d frame=%d osr=%d",
+                method()->name_and_sig_as_C_string(), state,
+                comp_level(), frame_size(), is_osr_method());
+#endif
   assert(state == zombie || state == not_entrant, "must be zombie or not_entrant");
 
   if (Atomic::load(&_state) >= state) {

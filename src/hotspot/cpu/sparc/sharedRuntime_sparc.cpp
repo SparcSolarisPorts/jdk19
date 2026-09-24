@@ -2388,6 +2388,9 @@ static void make_new_frames(MacroAssembler* masm, bool deopt) {
 // Ought to generate an ideal graph & compile, but here's some SPARC ASM
 // instead.
 void SharedRuntime::generate_deopt_blob() {
+#ifdef SPARC
+  tty->print_cr("[SPARC-TIER] generating deopt blob");
+#endif
   // allocate space for the code
   ResourceMark rm;
   // setup code generation tools
@@ -2649,6 +2652,9 @@ void SharedRuntime::generate_deopt_blob() {
 // Ought to generate an ideal graph & compile, but here's some SPARC ASM
 // instead.
 void SharedRuntime::generate_uncommon_trap_blob() {
+#ifdef SPARC
+  tty->print_cr("[SPARC-TIER] generating uncommon trap blob");
+#endif
   // allocate space for the code
   ResourceMark rm;
   // setup code generation tools
