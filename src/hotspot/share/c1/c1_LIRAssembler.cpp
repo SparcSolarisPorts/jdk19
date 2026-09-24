@@ -253,8 +253,8 @@ void LIR_Assembler::emit_code(BlockList* hir) {
 void LIR_Assembler::emit_block(BlockBegin* block) {
 #ifdef SPARC
   if (SparcC1Trace::begin(compilation()->method(), "BLOCK", 1)) {
-    tty->print("B%d bci=%d end_bci=%d pc=%d", block->block_id(), block->bci(),
-               block->end()->printable_bci(), code_offset());
+    tty->print("B%d bci=%d pc=%d", block->block_id(), block->bci(),
+               code_offset());
     SparcC1Trace::finish_line();
   }
 #endif
