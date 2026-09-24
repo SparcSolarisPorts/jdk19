@@ -42,8 +42,33 @@
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "utilities/powerOfTwo.hpp"
+#include "cpu/sparc/c1_sparcTrace.hpp"
 
 #define __ _masm->
+
+static const char* sparc_c1_lir_name(LIR_Code code) {
+  switch (code) {
+    case lir_add: return "add";
+    case lir_sub: return "sub";
+    case lir_mul: return "mul";
+    case lir_div: return "div";
+    case lir_rem: return "rem";
+    case lir_idiv: return "idiv";
+    case lir_irem: return "irem";
+    case lir_logic_and: return "and";
+    case lir_logic_or: return "or";
+    case lir_logic_xor: return "xor";
+    case lir_shl: return "shl";
+    case lir_shr: return "shr";
+    case lir_ushr: return "ushr";
+    default: return "other";
+  }
+}
+
+static void sparc_c1_trace_opr(const char* label, LIR_Opr opr) {
+  tty->print("%s=", label);
+  SparcC1Trace::print_opr(opr);
+}
 
 
 //------------------------------------------------------------
@@ -480,6 +505,18 @@ void LIR_Assembler::emit_op3(LIR_Op3* op) {
 
   // Handle idiv & irem:
 
+  if (SparcC1Trace::begin(compilation()->method(), "DIVREM", 2)) {
+    tty->print("pc=%d op=%s ", code_offset(), sparc_c1_lir_name(op->code()));
+    sparc_c1_trace_opr("dividend", op->in_opr1());
+    tty->print(" ");
+    sparc_c1_trace_opr("divisor", op->in_opr2());
+    tty->print(" ");
+    sparc_c1_trace_opr("scratch", op->in_opr3());
+    tty->print(" ");
+    sparc_c1_trace_opr("result", op->result_opr());
+    SparcC1Trace::finish_line();
+  }
+
   Register Rdividend = op->in_opr1()->as_register();
   Register Rdivisor  = noreg;
   Register Rscratch  = op->in_opr3()->as_register();
@@ -562,6 +599,13 @@ void LIR_Assembler::emit_op3(LIR_Op3* op) {
 
 
 void LIR_Assembler::emit_opBranch(LIR_OpBranch* op) {
+  if (SparcC1Trace::begin(compilation()->method(), "BRANCH", 2)) {
+    tty->print("pc=%d code=%d cond=%d type=%s block=%d ublock=%d", code_offset(),
+               (int)op->code(), (int)op->cond(), type2name(op->type()),
+               op->block() == NULL ? -1 : op->block()->block_id(),
+               op->ublock() == NULL ? -1 : op->ublock()->block_id());
+    SparcC1Trace::finish_line();
+  }
 #ifdef ASSERT
   assert(op->block() == NULL || op->block()->label() == op->label(), "wrong label");
   if (op->block() != NULL)  _branch_target_blocks.append(op->block());
@@ -715,8 +759,14 @@ void LIR_Assembler::ic_call(LIR_OpJavaCall* op) {
 
 
 int LIR_Assembler::store(LIR_Opr from_reg, Register base, int offset, BasicType type, bool wide, bool unaligned) {
+  if (SparcC1Trace::begin(compilation()->method(), "STORE-I", 3)) {
+    tty->print("pc=%d type=%s base=%s offset=%d wide=%d unaligned=%d ", code_offset(),
+               type2name(type), base->name(), offset, wide ? 1 : 0, unaligned ? 1 : 0);
+    sparc_c1_trace_opr("src", from_reg);
+    SparcC1Trace::finish_line();
+  }
   int store_offset;
-  if (!Assembler::is_simm13(offset + (type == T_LONG) ? wordSize : 0)) {
+  if (!Assembler::is_simm13(offset + ((type == T_LONG) ? wordSize : 0))) {
     assert(base != O7, "destroying register");
     assert(!unaligned, "can't handle this");
     // for offsets larger than a simm13 we setup the offset in O7
@@ -784,6 +834,12 @@ int LIR_Assembler::store(LIR_Opr from_reg, Register base, int offset, BasicType 
 
 
 int LIR_Assembler::store(LIR_Opr from_reg, Register base, Register disp, BasicType type, bool wide) {
+  if (SparcC1Trace::begin(compilation()->method(), "STORE-R", 3)) {
+    tty->print("pc=%d type=%s base=%s disp=%s wide=%d ", code_offset(),
+               type2name(type), base->name(), disp->name(), wide ? 1 : 0);
+    sparc_c1_trace_opr("src", from_reg);
+    SparcC1Trace::finish_line();
+  }
   if (is_reference_type(type)) {
     __ verify_oop(from_reg->as_register());
   }
@@ -821,8 +877,14 @@ int LIR_Assembler::store(LIR_Opr from_reg, Register base, Register disp, BasicTy
 
 
 int LIR_Assembler::load(Register base, int offset, LIR_Opr to_reg, BasicType type, bool wide, bool unaligned) {
+  if (SparcC1Trace::begin(compilation()->method(), "LOAD-I", 3)) {
+    tty->print("pc=%d type=%s base=%s offset=%d wide=%d unaligned=%d ", code_offset(),
+               type2name(type), base->name(), offset, wide ? 1 : 0, unaligned ? 1 : 0);
+    sparc_c1_trace_opr("dst", to_reg);
+    SparcC1Trace::finish_line();
+  }
   int load_offset;
-  if (!Assembler::is_simm13(offset + (type == T_LONG) ? wordSize : 0)) {
+  if (!Assembler::is_simm13(offset + ((type == T_LONG) ? wordSize : 0))) {
     assert(base != O7, "destroying register");
     assert(!unaligned, "can't handle this");
     // for offsets larger than a simm13 we setup the offset in O7
@@ -887,6 +949,12 @@ int LIR_Assembler::load(Register base, int offset, LIR_Opr to_reg, BasicType typ
 
 
 int LIR_Assembler::load(Register base, Register disp, LIR_Opr to_reg, BasicType type, bool wide) {
+  if (SparcC1Trace::begin(compilation()->method(), "LOAD-R", 3)) {
+    tty->print("pc=%d type=%s base=%s disp=%s wide=%d ", code_offset(),
+               type2name(type), base->name(), disp->name(), wide ? 1 : 0);
+    sparc_c1_trace_opr("dst", to_reg);
+    SparcC1Trace::finish_line();
+  }
   int load_offset = code_offset();
   switch(type) {
     case T_BOOLEAN: // fall through
@@ -995,7 +1063,10 @@ void LIR_Assembler::const2mem(LIR_Opr src, LIR_Opr dest, BasicType type, CodeEmi
       int value = c->as_jint_bits();
       if (value == 0) {
         tmp = FrameMap::G0_opr;
-      } else if (Assembler::is_simm13(value)) {
+      } else {
+        // const2mem must materialize every non-zero value.  The previous
+        // code only initialized O7 for simm13 constants and would otherwise
+        // store a stale register value if this path were reached.
         __ set(value, O7);
       }
       if (addr->index()->is_valid()) {
@@ -1241,6 +1312,15 @@ Address LIR_Assembler::as_Address_lo(LIR_Address* addr) {
 void LIR_Assembler::mem2reg(LIR_Opr src_opr, LIR_Opr dest, BasicType type,
                             LIR_PatchCode patch_code, CodeEmitInfo* info, bool wide) {
 
+  if (SparcC1Trace::begin(compilation()->method(), "MEM2REG", 3)) {
+    tty->print("pc=%d type=%s patch=%d wide=%d ", code_offset(), type2name(type),
+               (int)patch_code, wide ? 1 : 0);
+    sparc_c1_trace_opr("src", src_opr);
+    tty->print(" ");
+    sparc_c1_trace_opr("dst", dest);
+    SparcC1Trace::finish_line();
+  }
+
   assert(type != T_METADATA, "load of metadata ptr not supported");
   LIR_Address* addr = src_opr->as_address_ptr();
   LIR_Opr to_reg = dest;
@@ -1324,6 +1404,13 @@ void LIR_Assembler::reg2stack(LIR_Opr from_reg, LIR_Opr dest, BasicType type, bo
 
 
 void LIR_Assembler::reg2reg(LIR_Opr from_reg, LIR_Opr to_reg) {
+  if (SparcC1Trace::begin(compilation()->method(), "REG2REG", 3)) {
+    tty->print("pc=%d ", code_offset());
+    sparc_c1_trace_opr("src", from_reg);
+    tty->print(" ");
+    sparc_c1_trace_opr("dst", to_reg);
+    SparcC1Trace::finish_line();
+  }
   if (from_reg->is_float_kind() && to_reg->is_float_kind()) {
     if (from_reg->is_double_fpu()) {
       // double to double moves
@@ -1361,6 +1448,14 @@ void LIR_Assembler::reg2reg(LIR_Opr from_reg, LIR_Opr to_reg) {
 void LIR_Assembler::reg2mem(LIR_Opr from_reg, LIR_Opr dest, BasicType type,
                             LIR_PatchCode patch_code, CodeEmitInfo* info, bool pop_fpu_stack,
                             bool wide) {
+  if (SparcC1Trace::begin(compilation()->method(), "REG2MEM", 3)) {
+    tty->print("pc=%d type=%s patch=%d wide=%d ", code_offset(), type2name(type),
+               (int)patch_code, wide ? 1 : 0);
+    sparc_c1_trace_opr("src", from_reg);
+    tty->print(" ");
+    sparc_c1_trace_opr("dst", dest);
+    SparcC1Trace::finish_line();
+  }
   assert(type != T_METADATA, "store of metadata ptr not supported");
   LIR_Address* addr = dest->as_address_ptr();
 
@@ -1466,6 +1561,13 @@ void LIR_Assembler::emit_static_call_stub() {
 
 
 void LIR_Assembler::comp_op(LIR_Condition condition, LIR_Opr opr1, LIR_Opr opr2, LIR_Op2* op) {
+  if (SparcC1Trace::begin(compilation()->method(), "CMP", 2)) {
+    tty->print("pc=%d cond=%d ", code_offset(), (int)condition);
+    sparc_c1_trace_opr("a", opr1);
+    tty->print(" ");
+    sparc_c1_trace_opr("b", opr2);
+    SparcC1Trace::finish_line();
+  }
   if (opr1->is_single_fpu()) {
     __ fcmp(FloatRegisterImpl::S, Assembler::fcc0, opr1->as_float_reg(), opr2->as_float_reg());
   } else if (opr1->is_double_fpu()) {
@@ -1631,6 +1733,15 @@ void LIR_Assembler::cmove(LIR_Condition condition, LIR_Opr opr1, LIR_Opr opr2, L
 
 
 void LIR_Assembler::arith_op(LIR_Code code, LIR_Opr left, LIR_Opr right, LIR_Opr dest, CodeEmitInfo* info, bool pop_fpu_stack) {
+  if (SparcC1Trace::begin(compilation()->method(), "ARITH", 2)) {
+    tty->print("pc=%d op=%s ", code_offset(), sparc_c1_lir_name(code));
+    sparc_c1_trace_opr("left", left);
+    tty->print(" ");
+    sparc_c1_trace_opr("right", right);
+    tty->print(" ");
+    sparc_c1_trace_opr("dest", dest);
+    SparcC1Trace::finish_line();
+  }
   assert(info == NULL, "unused on this code path");
   assert(left->is_register(), "wrong items state");
   assert(dest->is_register(), "wrong items state");
@@ -1759,6 +1870,15 @@ void LIR_Assembler::intrinsic_op(LIR_Code code, LIR_Opr value, LIR_Opr thread, L
 
 
 void LIR_Assembler::logic_op(LIR_Code code, LIR_Opr left, LIR_Opr right, LIR_Opr dest) {
+  if (SparcC1Trace::begin(compilation()->method(), "LOGIC", 2)) {
+    tty->print("pc=%d op=%s ", code_offset(), sparc_c1_lir_name(code));
+    sparc_c1_trace_opr("left", left);
+    tty->print(" ");
+    sparc_c1_trace_opr("right", right);
+    tty->print(" ");
+    sparc_c1_trace_opr("dest", dest);
+    SparcC1Trace::finish_line();
+  }
   if (right->is_constant()) {
     if (dest->is_single_cpu()) {
       int simm13 = right->as_constant_ptr()->as_jint();
@@ -2203,6 +2323,15 @@ void LIR_Assembler::emit_arraycopy(LIR_OpArrayCopy* op) {
 
 
 void LIR_Assembler::shift_op(LIR_Code code, LIR_Opr left, LIR_Opr count, LIR_Opr dest, LIR_Opr tmp) {
+  if (SparcC1Trace::begin(compilation()->method(), "SHIFT-R", 2)) {
+    tty->print("pc=%d op=%s ", code_offset(), sparc_c1_lir_name(code));
+    sparc_c1_trace_opr("left", left);
+    tty->print(" ");
+    sparc_c1_trace_opr("count", count);
+    tty->print(" ");
+    sparc_c1_trace_opr("dest", dest);
+    SparcC1Trace::finish_line();
+  }
   if (dest->is_single_cpu()) {
     if (left->type() == T_OBJECT) {
       switch (code) {
@@ -2230,6 +2359,13 @@ void LIR_Assembler::shift_op(LIR_Code code, LIR_Opr left, LIR_Opr count, LIR_Opr
 
 
 void LIR_Assembler::shift_op(LIR_Code code, LIR_Opr left, jint count, LIR_Opr dest) {
+  if (SparcC1Trace::begin(compilation()->method(), "SHIFT-I", 2)) {
+    tty->print("pc=%d op=%s count=%d ", code_offset(), sparc_c1_lir_name(code), count);
+    sparc_c1_trace_opr("left", left);
+    tty->print(" ");
+    sparc_c1_trace_opr("dest", dest);
+    SparcC1Trace::finish_line();
+  }
   if (left->type() == T_OBJECT) {
     count = count & 63;  // shouldn't shift by more than sizeof(intptr_t)
     Register l = left->as_register();

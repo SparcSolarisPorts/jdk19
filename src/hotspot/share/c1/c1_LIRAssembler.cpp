@@ -34,6 +34,9 @@
 #include "compiler/oopMap.hpp"
 #include "runtime/os.hpp"
 #include "runtime/vm_version.hpp"
+#ifdef SPARC
+#include "cpu/sparc/c1_sparcTrace.hpp"
+#endif
 
 void LIR_Assembler::patching_epilog(PatchingStub* patch, LIR_PatchCode patch_code, Register obj, CodeEmitInfo* info) {
   // We must have enough patching space so that call can be inserted.
@@ -218,6 +221,12 @@ void LIR_Assembler::emit_exception_entries(ExceptionInfoList* info_list) {
 
 
 void LIR_Assembler::emit_code(BlockList* hir) {
+#ifdef SPARC
+  if (SparcC1Trace::begin(compilation()->method(), "METHOD-BEGIN", 1)) {
+    tty->print("blocks=%d frame=%d", hir->length(), frame_map()->framesize());
+    SparcC1Trace::finish_line();
+  }
+#endif
   if (PrintLIR) {
     print_LIR(hir);
   }
@@ -230,11 +239,25 @@ void LIR_Assembler::emit_code(BlockList* hir) {
 
   flush_debug_info(code_offset());
 
+#ifdef SPARC
+  if (SparcC1Trace::begin(compilation()->method(), "METHOD-END", 1)) {
+    tty->print("code_size=%d", code_offset());
+    SparcC1Trace::finish_line();
+  }
+#endif
+
   DEBUG_ONLY(check_no_unbound_labels());
 }
 
 
 void LIR_Assembler::emit_block(BlockBegin* block) {
+#ifdef SPARC
+  if (SparcC1Trace::begin(compilation()->method(), "BLOCK", 1)) {
+    tty->print("B%d bci=%d end_bci=%d pc=%d", block->block_id(), block->bci(),
+               block->end()->printable_bci(), code_offset());
+    SparcC1Trace::finish_line();
+  }
+#endif
   if (block->is_set(BlockBegin::backward_branch_target_flag)) {
     align_backward_branch_target();
   }
@@ -300,7 +323,26 @@ void LIR_Assembler::emit_lir_list(LIR_List* list) {
     }
 #endif /* PRODUCT */
 
+#ifdef SPARC
+    int sparc_c1_trace_pc_before = -1;
+    if (SparcC1Trace::begin(compilation()->method(), "LIR", 1)) {
+      sparc_c1_trace_pc_before = code_offset();
+      tty->print("pc=%d ", sparc_c1_trace_pc_before);
+      op->print_on(tty);
+      SparcC1Trace::finish_line();
+    }
+#endif
+
     op->emit_code(this);
+
+#ifdef SPARC
+    if (sparc_c1_trace_pc_before >= 0 &&
+        SparcC1Trace::begin(compilation()->method(), "LIR-DONE", 1)) {
+      tty->print("pc=%d->%d bytes=%d op=%s", sparc_c1_trace_pc_before, code_offset(),
+                 code_offset() - sparc_c1_trace_pc_before, op->name());
+      SparcC1Trace::finish_line();
+    }
+#endif
 
     if (compilation()->debug_info_recorder()->recording_non_safepoints()) {
       process_debug_info(op);

@@ -39,6 +39,7 @@
 #include "runtime/stubRoutines.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "vmreg_sparc.inline.hpp"
+#include "cpu/sparc/c1_sparcTrace.hpp"
 
 #ifdef ASSERT
 #define __ gen()->lir(__FILE__, __LINE__)->
@@ -150,11 +151,23 @@ LIR_Opr LIRGenerator::safepoint_poll_register() {
 LIR_Address* LIRGenerator::generate_address(LIR_Opr base, LIR_Opr index,
                                             int shift, int disp, BasicType type) {
   assert(base->is_register(), "must be");
+  if (SparcC1Trace::begin(compilation()->method(), "ADDR-IN", 2)) {
+    tty->print("type=%s shift=%d disp=%d base=", type2name(type), shift, disp);
+    SparcC1Trace::print_opr(base);
+    tty->print(" index=");
+    SparcC1Trace::print_opr(index);
+    SparcC1Trace::finish_line();
+  }
   intx large_disp = disp;
 
   // accumulate fixed displacements
   if (index->is_constant()) {
-    large_disp += (intx)(index->as_constant_ptr()->as_jint()) << shift;
+    jint index_value = index->as_constant_ptr()->as_jint();
+    large_disp += (intx)index_value << shift;
+    if (SparcC1Trace::begin(compilation()->method(), "ADDR-CONST", 2)) {
+      tty->print("index=%d shift=%d accumulated_disp=" INTX_FORMAT, index_value, shift, large_disp);
+      SparcC1Trace::finish_line();
+    }
     index = LIR_OprFact::illegalOpr;
   }
 
@@ -168,7 +181,15 @@ LIR_Address* LIRGenerator::generate_address(LIR_Opr base, LIR_Opr index,
     if (large_disp != 0) {
       LIR_Opr tmp = new_pointer_register();
       if (Assembler::is_simm13(large_disp)) {
-        __ add(tmp, LIR_OprFact::intptrConst(large_disp), tmp);
+        if (SparcC1Trace::begin(compilation()->method(), "ADDR-FOLD", 2)) {
+          tty->print("simm13 disp=" INTX_FORMAT " into index=", large_disp);
+          SparcC1Trace::print_opr(index);
+          SparcC1Trace::finish_line();
+        }
+        // Add the displacement to the existing index.  The old SPARC
+        // port accidentally used the newly allocated (and therefore
+        // uninitialized) tmp as both source and destination.
+        __ add(index, LIR_OprFact::intptrConst(large_disp), tmp);
         index = tmp;
       } else {
         __ move(LIR_OprFact::intptrConst(large_disp), tmp);
@@ -186,9 +207,21 @@ LIR_Address* LIRGenerator::generate_address(LIR_Opr base, LIR_Opr index,
 
   // at this point we either have base + index or base + displacement
   if (large_disp == 0) {
+    if (SparcC1Trace::begin(compilation()->method(), "ADDR-OUT", 2)) {
+      tty->print("base+index type=%s base=", type2name(type));
+      SparcC1Trace::print_opr(base);
+      tty->print(" index=");
+      SparcC1Trace::print_opr(index);
+      SparcC1Trace::finish_line();
+    }
     return new LIR_Address(base, index, type);
   } else {
     assert(Assembler::is_simm13(large_disp), "must be");
+    if (SparcC1Trace::begin(compilation()->method(), "ADDR-OUT", 2)) {
+      tty->print("base+disp type=%s disp=" INTX_FORMAT " base=", type2name(type), large_disp);
+      SparcC1Trace::print_opr(base);
+      SparcC1Trace::finish_line();
+    }
     return new LIR_Address(base, large_disp, type);
   }
 }
@@ -197,6 +230,13 @@ LIR_Address* LIRGenerator::generate_address(LIR_Opr base, LIR_Opr index,
 LIR_Address* LIRGenerator::emit_array_address(LIR_Opr array_opr, LIR_Opr index_opr,
                                               BasicType type) {
   int elem_size = type2aelembytes(type);
+  if (SparcC1Trace::begin(compilation()->method(), "ARRAY-ADDR", 2)) {
+    tty->print("type=%s elem_size=%d array=", type2name(type), elem_size);
+    SparcC1Trace::print_opr(array_opr);
+    tty->print(" index=");
+    SparcC1Trace::print_opr(index_opr);
+    SparcC1Trace::finish_line();
+  }
   int shift = exact_log2(elem_size);
 
   LIR_Opr base_opr;
