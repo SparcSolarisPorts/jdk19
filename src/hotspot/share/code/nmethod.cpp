@@ -1420,10 +1420,6 @@ bool nmethod::make_not_entrant_or_zombie(int state) {
   assert(state == zombie || state == not_entrant, "must be zombie or not_entrant");
 
 #ifdef SPARC
-  sparc_diag_nmethod(state == zombie ? "make_zombie-enter" : "make_not_entrant-enter", this, state);
-#endif
-
-#ifdef SPARC
   tty->print_cr("[SPARC-DIAG] nmethod transition %s -> %s level=%d frame=%d old_state=%d thread=%" UINTX_FORMAT " osr=%d",
                 method() != NULL ? method()->name_and_sig_as_C_string() : "<null>",
                 state == zombie ? "zombie" : "not_entrant",
