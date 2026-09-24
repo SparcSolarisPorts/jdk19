@@ -42,7 +42,7 @@
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "utilities/powerOfTwo.hpp"
-#include "cpu/sparc/c1_sparcTrace.hpp"
+#include "c1_sparcTrace.hpp"
 
 #define __ _masm->
 

@@ -39,7 +39,7 @@
 #include "runtime/stubRoutines.hpp"
 #include "utilities/powerOfTwo.hpp"
 #include "vmreg_sparc.inline.hpp"
-#include "cpu/sparc/c1_sparcTrace.hpp"
+#include "c1_sparcTrace.hpp"
 
 #ifdef ASSERT
 #define __ gen()->lir(__FILE__, __LINE__)->

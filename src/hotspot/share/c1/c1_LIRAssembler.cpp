@@ -35,7 +35,7 @@
 #include "runtime/os.hpp"
 #include "runtime/vm_version.hpp"
 #ifdef SPARC
-#include "cpu/sparc/c1_sparcTrace.hpp"
+#include "c1_sparcTrace.hpp"
 #endif
 
 void LIR_Assembler::patching_epilog(PatchingStub* patch, LIR_PatchCode patch_code, Register obj, CodeEmitInfo* info) {
