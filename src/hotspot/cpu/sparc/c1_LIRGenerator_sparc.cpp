@@ -492,6 +492,13 @@ void LIRGenerator::do_ArithmeticOp_Int(ArithmeticOp* x) {
   bool is_div_rem = x->op() == Bytecodes::_idiv || x->op() == Bytecodes::_irem;
   LIRItem left(x->x(), this);
   LIRItem right(x->y(), this);
+  // SPARC V9 integer divide/remainder canonicalizes 32-bit operands with
+  // SRA before using SDIVX.  Allow the assembler to do that in-place
+  // without clobbering values that are still live after this operation.
+  if (is_div_rem) {
+    left.set_destroys_register();
+    right.set_destroys_register();
+  }
   // missing test if instr is commutative and if we should swap
   right.load_nonconstant();
   assert(right.is_constant() || right.is_register(), "wrong state of right");

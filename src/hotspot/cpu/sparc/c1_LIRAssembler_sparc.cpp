@@ -523,28 +523,33 @@ void LIR_Assembler::emit_op3(LIR_Op3* op) {
     }
   }
 
-  __ sra(Rdividend, 31, Rscratch);
-  __ wry(Rscratch);
+  // C1 used to use the legacy V8-style %y + sdivcc sequence here.  On
+  // sparcv9 use the same strategy as the C2 backend: first canonicalize
+  // Java int operands to signed 64-bit values, then use SDIVX.  This is
+  // especially important for remainder (Math.floorMod / SetN.probe), where
+  // dirty upper register bits otherwise produce an incorrect array index.
+  __ sra(Rdividend, 0, Rdividend);
+  if (Rdivisor != noreg) {
+    __ sra(Rdivisor, 0, Rdivisor);
+  }
 
   add_debug_info_for_div0_here(op->info());
 
-  if (Rdivisor != noreg) {
-    __ sdivcc(Rdividend, Rdivisor, (op->code() == lir_idiv ? Rresult : Rscratch));
-  } else {
-    assert(Assembler::is_simm13(divisor), "can only handle simm13");
-    __ sdivcc(Rdividend, divisor, (op->code() == lir_idiv ? Rresult : Rscratch));
-  }
-
-  Label skip;
-  __ br(Assembler::overflowSet, true, Assembler::pn, skip);
-  __ delayed()->Assembler::sethi(0x80000000, (op->code() == lir_idiv ? Rresult : Rscratch));
-  __ bind(skip);
-
-  if (op->code() == lir_irem) {
+  if (op->code() == lir_idiv) {
     if (Rdivisor != noreg) {
-      __ smul(Rscratch, Rdivisor, Rscratch);
+      __ sdivx(Rdividend, Rdivisor, Rresult);
     } else {
-      __ smul(Rscratch, divisor, Rscratch);
+      assert(Assembler::is_simm13(divisor), "can only handle simm13");
+      __ sdivx(Rdividend, divisor, Rresult);
+    }
+  } else {
+    if (Rdivisor != noreg) {
+      __ sdivx(Rdividend, Rdivisor, Rscratch);
+      __ mulx(Rscratch, Rdivisor, Rscratch);
+    } else {
+      assert(Assembler::is_simm13(divisor), "can only handle simm13");
+      __ sdivx(Rdividend, divisor, Rscratch);
+      __ mulx(Rscratch, divisor, Rscratch);
     }
     __ sub(Rdividend, Rscratch, Rresult);
   }

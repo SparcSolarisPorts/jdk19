@@ -62,7 +62,10 @@ void BarrierSetAssembler::store_at(MacroAssembler* masm, DecoratorSet decorators
     }
     break;
   }
-  default: ShouldNotReachHere(); // this barrier entry point handles references only
+  case T_ADDRESS:
+    __ st_ptr(val, dst);
+    break;
+  default: ShouldNotReachHere(); // other primitive types are handled elsewhere
   }
 }
 
@@ -97,7 +100,10 @@ void BarrierSetAssembler::load_at(MacroAssembler* masm, DecoratorSet decorators,
     }
     break;
   }
-  default: ShouldNotReachHere(); // this barrier entry point handles references only
+  case T_ADDRESS:
+    __ ld_ptr(src, dst);
+    break;
+  default: ShouldNotReachHere(); // other primitive types are handled elsewhere
   }
 }
 
