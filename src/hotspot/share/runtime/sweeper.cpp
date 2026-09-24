@@ -509,6 +509,10 @@ NMethodSweeper::MethodStateChange NMethodSweeper::process_compiled_method(Compil
     // stack we can safely convert it to a zombie method
     OrderAccess::loadload(); // _stack_traversal_mark and _state
     if (cm->can_convert_to_zombie()) {
+#ifdef SPARC
+      tty->print_cr("[SPARC-DIAG] sweeper converting zombie state=%d thread=%" UINTX_FORMAT,
+                    cm->get_state(), os::current_thread_id());
+#endif
       // Code cache state change is tracked in make_zombie()
       cm->make_zombie();
       SWEEP(cm);

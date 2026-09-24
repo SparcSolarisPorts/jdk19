@@ -1420,13 +1420,17 @@ bool nmethod::make_not_entrant_or_zombie(int state) {
   assert(state == zombie || state == not_entrant, "must be zombie or not_entrant");
 
 #ifdef SPARC
-  tty->print_cr("[SPARC-DIAG] nmethod transition %s -> %s level=%d frame=%d state=%d osr=%d",
+  tty->print_cr("[SPARC-DIAG] nmethod transition %s -> %s level=%d frame=%d old_state=%d thread=%" UINTX_FORMAT " osr=%d",
                 method() != NULL ? method()->name_and_sig_as_C_string() : "<null>",
                 state == zombie ? "zombie" : "not_entrant",
                 comp_level(),
                 frame_size(),
                 Atomic::load(&_state),
+                os::current_thread_id(),
                 is_osr_method() ? 1 : 0);
+  if (Atomic::load(&_state) == zombie && state == not_entrant) {
+    tty->print_cr("[SPARC-DIAG] WARNING zombie->not_entrant transition detected");
+  }
 #endif
 
   if (Atomic::load(&_state) >= state) {
