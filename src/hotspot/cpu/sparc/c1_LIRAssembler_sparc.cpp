@@ -545,6 +545,13 @@ void LIR_Assembler::emit_op3(LIR_Op3* op) {
       }
       __ add(Rdividend, Rscratch, Rscratch);
       __ sra(Rscratch, log2i_exact(divisor), Rresult);
+      // C1INTFIX-2: canonicalize power-of-2 idiv result; the srl+add sequence
+      // above can leave implementation-defined upper bits.
+      if (SparcC1Trace::begin(compilation()->method(), "CANON-DIVREM-POW2", 2)) {
+        tty->print("pc=%d op=idiv reg=%s", code_offset(), Rresult->name());
+        SparcC1Trace::finish_line();
+      }
+      __ sra(Rresult, 0, Rresult);
       return;
     } else {
       if (divisor == 2) {
@@ -556,6 +563,12 @@ void LIR_Assembler::emit_op3(LIR_Op3* op) {
       __ add(Rdividend, Rscratch, Rscratch);
       __ andn(Rscratch, divisor - 1,Rscratch);
       __ sub(Rdividend, Rscratch, Rresult);
+      // C1INTFIX-2: canonicalize power-of-2 irem result (see idiv above).
+      if (SparcC1Trace::begin(compilation()->method(), "CANON-DIVREM-POW2", 2)) {
+        tty->print("pc=%d op=irem reg=%s", code_offset(), Rresult->name());
+        SparcC1Trace::finish_line();
+      }
+      __ sra(Rresult, 0, Rresult);
       return;
     }
   }
@@ -731,6 +744,13 @@ void LIR_Assembler::emit_opConvert(LIR_OpConvert* op) {
       int shift = BitsPerInt - T_CHAR_aelem_bytes * BitsPerByte;
       __ sll (rval, shift, rdst);
       __ srl (rdst, shift, rdst);
+      // C1INTFIX-2: srl leaves the upper 32 bits implementation-defined;
+      // chars feed array-index/LUT address math, so keep the value canonical.
+      if (SparcC1Trace::begin(compilation()->method(), "CANON-I2C", 2)) {
+        tty->print("pc=%d reg=%s", code_offset(), rdst->name());
+        SparcC1Trace::finish_line();
+      }
+      __ sra (rdst, 0, rdst);
       break;
     }
 
@@ -1143,6 +1163,17 @@ void LIR_Assembler::const2reg(LIR_Opr src, LIR_Opr dest, LIR_PatchCode patch_cod
         if (to_reg->is_single_cpu()) {
           assert(patch_code == lir_patch_none, "no patching handled here");
           __ set(con, to_reg->as_register());
+          // C1INTFIX-2: set() materializes negative int constants with zeroed
+          // upper bits (non-canonical).  Canonicalize so the value is safe in
+          // 64-bit address math and in deopt handoff to the interpreter.
+          if (c->type() == T_INT) {
+            if (SparcC1Trace::begin(compilation()->method(), "CANON-CONST", 2)) {
+              tty->print("pc=%d con=%d reg=%s", code_offset(), con,
+                         to_reg->as_register()->name());
+              SparcC1Trace::finish_line();
+            }
+            __ sra(to_reg->as_register(), 0, to_reg->as_register());
+          }
         } else {
           ShouldNotReachHere();
           assert(to_reg->is_single_fpu(), "wrong register kind");
@@ -1729,6 +1760,16 @@ void LIR_Assembler::cmove(LIR_Condition condition, LIR_Opr opr1, LIR_Opr opr2, L
     ShouldNotReachHere();
   }
   __ bind(skip);
+  // C1INTFIX-2: the sethi/or3 materialization of non-simm13 int constants
+  // leaves zeroed upper bits on the taken arm; make the cmove result
+  // canonical for both arms.
+  if (type == T_INT) {
+    if (SparcC1Trace::begin(compilation()->method(), "CANON-CMOVE", 2)) {
+      tty->print("pc=%d reg=%s", code_offset(), result->as_register()->name());
+      SparcC1Trace::finish_line();
+    }
+    __ sra(result->as_register(), 0, result->as_register());
+  }
 }
 
 
@@ -2177,6 +2218,8 @@ void LIR_Assembler::emit_arraycopy(LIR_OpArrayCopy* op) {
           __ add(src_ptr, src_pos, src_ptr);
         } else {
           __ sll(src_pos, shift, tmp);
+          // C1INTFIX-2: scaled index feeds 64-bit pointer add below.
+          __ sra(tmp, 0, tmp);
           __ add(src_ptr, tmp, src_ptr);
         }
 
@@ -2185,6 +2228,8 @@ void LIR_Assembler::emit_arraycopy(LIR_OpArrayCopy* op) {
           __ add(dst_ptr, dst_pos, dst_ptr);
         } else {
           __ sll(dst_pos, shift, tmp);
+          // C1INTFIX-2: scaled index feeds 64-bit pointer add below.
+          __ sra(tmp, 0, tmp);
           __ add(dst_ptr, tmp, dst_ptr);
         }
         __ mov(length, len);
@@ -2298,6 +2343,8 @@ void LIR_Assembler::emit_arraycopy(LIR_OpArrayCopy* op) {
     __ add(src_ptr, src_pos, src_ptr);
   } else {
     __ sll(src_pos, shift, tmp);
+    // C1INTFIX-2: scaled index feeds 64-bit pointer add below.
+    __ sra(tmp, 0, tmp);
     __ add(src_ptr, tmp, src_ptr);
   }
 
@@ -2306,6 +2353,8 @@ void LIR_Assembler::emit_arraycopy(LIR_OpArrayCopy* op) {
     __ add(dst_ptr, dst_pos, dst_ptr);
   } else {
     __ sll(dst_pos, shift, tmp);
+    // C1INTFIX-2: scaled index feeds 64-bit pointer add below.
+    __ sra(tmp, 0, tmp);
     __ add(dst_ptr, tmp, dst_ptr);
   }
 
@@ -2340,13 +2389,26 @@ void LIR_Assembler::shift_op(LIR_Code code, LIR_Opr left, LIR_Opr count, LIR_Opr
         case lir_ushr: __ srl   (left->as_register(), count->as_register(), dest->as_register()); break;
         default: ShouldNotReachHere();
       }
-    } else
+    } else {
       switch (code) {
         case lir_shl:  __ sll   (left->as_register(), count->as_register(), dest->as_register()); break;
         case lir_shr:  __ sra   (left->as_register(), count->as_register(), dest->as_register()); break;
         case lir_ushr: __ srl   (left->as_register(), count->as_register(), dest->as_register()); break;
         default: ShouldNotReachHere();
       }
+      // C1INTFIX-2: sll/srl leave the upper 32 bits of the result
+      // implementation-defined on SPARC V9.  Canonicalize int shift results
+      // so 64-bit address math and deopt handoff to the interpreter only
+      // ever see sign-extended values.  sra is self-canonicalizing.
+      if (code != lir_shr && dest->type() == T_INT) {
+        if (SparcC1Trace::begin(compilation()->method(), "CANON-SHIFT-R", 2)) {
+          tty->print("pc=%d op=%s reg=%s", code_offset(), sparc_c1_lir_name(code),
+                     dest->as_register()->name());
+          SparcC1Trace::finish_line();
+        }
+        __ sra(dest->as_register(), 0, dest->as_register());
+      }
+    }
   } else {
     switch (code) {
       case lir_shl:  __ sllx  (left->as_register_lo(), count->as_register(), dest->as_register_lo()); break;
@@ -2386,6 +2448,15 @@ void LIR_Assembler::shift_op(LIR_Code code, LIR_Opr left, jint count, LIR_Opr de
       case lir_shr:  __ sra   (left->as_register(), count, dest->as_register()); break;
       case lir_ushr: __ srl   (left->as_register(), count, dest->as_register()); break;
       default: ShouldNotReachHere();
+    }
+    // C1INTFIX-2: canonicalize sll/srl int results (see shift_op above).
+    if (code != lir_shr && dest->type() == T_INT) {
+      if (SparcC1Trace::begin(compilation()->method(), "CANON-SHIFT-I", 2)) {
+        tty->print("pc=%d op=%s count=%d reg=%s", code_offset(), sparc_c1_lir_name(code),
+                   count, dest->as_register()->name());
+        SparcC1Trace::finish_line();
+      }
+      __ sra(dest->as_register(), 0, dest->as_register());
     }
   } else if (dest->is_double_cpu()) {
     count = count & 63; // Java spec
@@ -3186,6 +3257,16 @@ void LIR_Assembler::negate(LIR_Opr left, LIR_Opr dest, LIR_Opr tmp) {
 
   if (left->is_single_cpu()) {
     __ neg(left->as_register(), dest->as_register());
+    // C1INTFIX-2: neg is a 64-bit sub from %g0; on 32-bit overflow
+    // (-Integer.MIN_VALUE) the upper bits are not the sign extension of
+    // the low word.  Canonicalize int results.
+    if (dest->type() == T_INT) {
+      if (SparcC1Trace::begin(compilation()->method(), "CANON-NEG", 2)) {
+        tty->print("pc=%d reg=%s", code_offset(), dest->as_register()->name());
+        SparcC1Trace::finish_line();
+      }
+      __ sra(dest->as_register(), 0, dest->as_register());
+    }
   } else if (left->is_single_fpu()) {
     __ fneg(FloatRegisterImpl::S, left->as_float_reg(), dest->as_float_reg());
   } else if (left->is_double_fpu()) {
