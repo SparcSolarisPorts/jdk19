@@ -220,9 +220,7 @@ bool Compiler::is_intrinsic_supported(const methodHandle& method) {
   case vmIntrinsics::_updateBytesCRC32C:
   case vmIntrinsics::_updateDirectByteBufferCRC32C:
 #endif
-#ifndef SPARC
   case vmIntrinsics::_vectorizedMismatch:
-#endif
   case vmIntrinsics::_compareAndSetInt:
   case vmIntrinsics::_compareAndSetReference:
   case vmIntrinsics::_getCharStringU:

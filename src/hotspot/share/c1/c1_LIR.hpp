@@ -236,13 +236,13 @@ class LIR_Opr {
     , is_xmm_bits    = 1
     , last_use_bits  = 1
     , is_fpu_stack_offset_bits = 1        // used in assertion checking on x86 for FPU stack slot allocation
-    , non_data_bits  = kind_bits + type_bits + size_bits + destroys_bits + virtual_bits
+    , non_data_bits  = pointer_bits + kind_bits + type_bits + size_bits + destroys_bits + virtual_bits
                        + is_xmm_bits + last_use_bits + is_fpu_stack_offset_bits
     , data_bits      = BitsPerInt - non_data_bits
     , reg_bits       = data_bits / 2      // for two registers in one value encoding
   };
 
-  enum OprShift : uintptr_t {
+  enum OprShift {
       kind_shift     = 0
     , type_shift     = kind_shift     + kind_bits
     , size_shift     = type_shift     + type_bits
@@ -275,7 +275,7 @@ class LIR_Opr {
     , no_type_mask   = (int)(~(type_mask | last_use_mask | is_fpu_stack_offset_mask))
   };
 
-  uint32_t data() const                          { return (uint32_t)value() >> data_shift; }
+  uintptr_t data() const                         { return value() >> data_shift; }
   int lo_reg_half() const                        { return data() & lower_reg_mask; }
   int hi_reg_half() const                        { return (data() >> reg_bits) & lower_reg_mask; }
   OprKind kind_field() const                     { return (OprKind)(value() & kind_mask); }
@@ -299,9 +299,7 @@ class LIR_Opr {
 
   enum {
     vreg_base = ConcreteRegisterImpl::number_of_registers,
-    data_max = (1 << data_bits) - 1,      // max unsigned value for data bit field
-    vreg_limit =  10000,                  // choose a reasonable limit,
-    vreg_max = MIN2(vreg_limit, data_max) // and make sure if fits in the bit field
+    vreg_max = (1 << data_bits) - 1
   };
 
   static inline LIR_Opr illegalOpr();
@@ -757,6 +755,7 @@ class LIR_OprFact: public AllStatic {
     res->validate_type();
     assert(res->vreg_number() == index, "conversion check");
     assert(index >= LIR_Opr::vreg_base, "must start at vreg_base");
+    assert(index <= (max_jint >> LIR_Opr::data_shift), "index is too big");
 
     // old-style calculation; check if old and new method are equal
     LIR_Opr::OprType t = as_OprType(type);
@@ -835,7 +834,7 @@ class LIR_OprFact: public AllStatic {
 
 #ifdef ASSERT
     assert(index >= 0, "index must be positive");
-    assert(index == (int)res->data(), "conversion check");
+    assert(index <= (max_jint >> LIR_Opr::data_shift), "index is too big");
 
     LIR_Opr old_res = (LIR_Opr)(intptr_t)((index << LIR_Opr::data_shift) |
                                           LIR_Opr::stack_value           |
@@ -1704,14 +1703,6 @@ class LIR_OpBranch: public LIR_Op2 {
   CodeStub*     _stub;   // if this is a branch to a stub, this is the stub
 
  public:
-  LIR_OpBranch(LIR_Condition cond, Label* lbl)
-    : LIR_Op2(lir_branch, cond, LIR_OprFact::illegalOpr, LIR_OprFact::illegalOpr, (CodeEmitInfo*) NULL)
-    , _type(T_ILLEGAL)
-    , _label(lbl)
-    , _block(NULL)
-    , _ublock(NULL)
-    , _stub(NULL) { }
-
   LIR_OpBranch(LIR_Condition cond, BasicType type, Label* lbl)
     : LIR_Op2(lir_branch, cond, LIR_OprFact::illegalOpr, LIR_OprFact::illegalOpr, (CodeEmitInfo*) NULL)
     , _type(type)
@@ -1720,17 +1711,13 @@ class LIR_OpBranch: public LIR_Op2 {
     , _ublock(NULL)
     , _stub(NULL) { }
 
-  LIR_OpBranch(LIR_Condition cond, BlockBegin* block);
-  LIR_OpBranch(LIR_Condition cond, CodeStub* stub);
   LIR_OpBranch(LIR_Condition cond, BasicType type, BlockBegin* block);
   LIR_OpBranch(LIR_Condition cond, BasicType type, CodeStub* stub);
 
   // for unordered comparisons
-  LIR_OpBranch(LIR_Condition cond, BlockBegin* block, BlockBegin* ublock);
   LIR_OpBranch(LIR_Condition cond, BasicType type, BlockBegin* block, BlockBegin* ublock);
 
-  BasicType     type() const { return _type; }
-
+  BasicType     type()        const              { return _type;        }
   LIR_Condition cond() const {
     return condition();
   }
@@ -2322,31 +2309,24 @@ class LIR_List: public CompilationResourceObj {
 
   // jump is an unconditional branch
   void jump(BlockBegin* block) {
-    append(new LIR_OpBranch(lir_cond_always, block));
+    append(new LIR_OpBranch(lir_cond_always, T_ILLEGAL, block));
   }
   void jump(CodeStub* stub) {
-    append(new LIR_OpBranch(lir_cond_always, stub));
+    append(new LIR_OpBranch(lir_cond_always, T_ILLEGAL, stub));
   }
-  void branch(LIR_Condition cond, Label* lbl) {
-    append(new LIR_OpBranch(cond, lbl));
+  void branch(LIR_Condition cond, BasicType type, Label* lbl)        { append(new LIR_OpBranch(cond, type, lbl)); }
+  void branch(LIR_Condition cond, BasicType type, BlockBegin* block) {
+    assert(type != T_FLOAT && type != T_DOUBLE, "no fp comparisons");
+    append(new LIR_OpBranch(cond, type, block));
   }
-  // Should not be used for fp comparisons
-  void branch(LIR_Condition cond, BlockBegin* block) {
-    append(new LIR_OpBranch(cond, block));
+  void branch(LIR_Condition cond, BasicType type, CodeStub* stub)    {
+    assert(type != T_FLOAT && type != T_DOUBLE, "no fp comparisons");
+    append(new LIR_OpBranch(cond, type, stub));
   }
-  // Should not be used for fp comparisons
-  void branch(LIR_Condition cond, CodeStub* stub) {
-    append(new LIR_OpBranch(cond, stub));
+  void branch(LIR_Condition cond, BasicType type, BlockBegin* block, BlockBegin* unordered) {
+    assert(type == T_FLOAT || type == T_DOUBLE, "fp comparisons only");
+    append(new LIR_OpBranch(cond, type, block, unordered));
   }
-  // Should only be used for fp comparisons
-  void branch(LIR_Condition cond, BlockBegin* block, BlockBegin* unordered) {
-    append(new LIR_OpBranch(cond, block, unordered));
-  }
-  // Typed branch overloads used by the SPARC C1 backend.
-  void branch(LIR_Condition cond, BasicType type, Label* lbl) { append(new LIR_OpBranch(cond, type, lbl)); }
-  void branch(LIR_Condition cond, BasicType type, BlockBegin* block) { append(new LIR_OpBranch(cond, type, block)); }
-  void branch(LIR_Condition cond, BasicType type, CodeStub* stub) { append(new LIR_OpBranch(cond, type, stub)); }
-  void branch(LIR_Condition cond, BasicType type, BlockBegin* block, BlockBegin* unordered) { append(new LIR_OpBranch(cond, type, block, unordered)); }
 
   void shift_left(LIR_Opr value, LIR_Opr count, LIR_Opr dst, LIR_Opr tmp);
   void shift_right(LIR_Opr value, LIR_Opr count, LIR_Opr dst, LIR_Opr tmp);
@@ -2464,7 +2444,7 @@ class LIR_OpVisitState: public StackObj {
   typedef enum { inputMode, firstMode = inputMode, tempMode, outputMode, numModes, invalidMode = -1 } OprMode;
 
   enum {
-    maxNumberOfOperands = 21,
+    maxNumberOfOperands = 20,
     maxNumberOfInfos = 4
   };
 

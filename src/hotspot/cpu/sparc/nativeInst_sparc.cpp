@@ -270,17 +270,6 @@ void NativeFarCall::print() {
   tty->print_cr(INTPTR_FORMAT ": call " INTPTR_FORMAT, p2i(instruction_address()), p2i(destination()));
 }
 
-void NativeFarCall::insert(address code_pos, address entry) {
-  ResourceMark rm;
-  CodeBuffer cb(code_pos, instruction_size);
-  MacroAssembler masm(&cb);
-  AddressLiteral target(entry, relocInfo::none);
-  masm.jumpl_to(target, O7, O7);
-  masm.delayed()->nop();
-  assert(masm.pc() - code_pos == instruction_size, "wrong SPARC far-call size");
-  ICache::invalidate_range(code_pos, instruction_size);
-}
-
 bool NativeFarCall::destination_is_compiled_verified_entry_point() {
   nmethod* callee = CodeCache::find_nmethod(destination());
   if (callee == NULL) {
@@ -292,21 +281,12 @@ bool NativeFarCall::destination_is_compiled_verified_entry_point() {
 
 // MT-safe patching of a far call.
 void NativeFarCall::replace_mt_safe(address instr_addr, address code_buffer) {
-  ShouldNotCallThis(); // SPARC far-call rewriting is not MT-safe; calls are emitted once
+  Unimplemented();
 }
 
 // Code for unit testing implementation of NativeFarCall class
 void NativeFarCall::test() {
-#ifdef ASSERT
-  ResourceMark rm;
-  CodeBuffer cb("test far call", 100, 100);
-  MacroAssembler* masm = new MacroAssembler(&cb);
-  AddressLiteral target((address)0x7fffbbbb, relocInfo::external_word_type);
-  masm->jumpl_to(target, O7, O7);
-  masm->delayed()->nop();
-  NativeFarCall* call = nativeFarCall_at(cb.insts_begin());
-  call->print();
-#endif
+  Unimplemented();
 }
 // End code for unit testing implementation of NativeFarCall class
 
@@ -800,14 +780,7 @@ void NativeJump::test() {
 
 
 void NativeJump::insert(address code_pos, address entry) {
-  ResourceMark rm;
-  CodeBuffer cb(code_pos, instruction_size);
-  MacroAssembler masm(&cb);
-  AddressLiteral target(entry, relocInfo::none);
-  masm.jump_to(target, G3_scratch);
-  masm.delayed()->nop();
-  assert(masm.pc() - code_pos == instruction_size, "wrong SPARC jump size");
-  ICache::invalidate_range(code_pos, instruction_size);
+  Unimplemented();
 }
 
 // MT safe inserting of a jump over an unknown instruction sequence (used by nmethod::makeZombie)

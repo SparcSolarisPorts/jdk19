@@ -690,22 +690,6 @@ void JavaFrameAnchor::capture_last_Java_pc(intptr_t* sp) {
     intptr_t* _post_Java_sp = frame::next_younger_sp_or_null(last_Java_sp(), sp);
     // Really this should never fail otherwise VM call must have non-standard
     // frame linkage (bad) or stack is not properly flushed (worse).
-    if (_post_Java_sp == NULL) {
-      tty->print_cr("SPARC anchor walk failed: last_Java_sp=%p flushed_sp=%p",
-                    (void*)last_Java_sp(), (void*)sp);
-      intptr_t* walk = sp;
-      for (int n = 0; n < 32 && walk != last_Java_sp(); n++) {
-        if (!sp_is_valid(last_Java_sp(), sp, walk)) {
-          tty->print_cr("  step %d: invalid sp=%p", n, (void*)walk);
-          break;
-        }
-        intptr_t saved_fp = walk[FP->sp_offset_in_saved_window()];
-        intptr_t* next = (intptr_t*)((uintptr_t)saved_fp + (uintptr_t)STACK_BIAS);
-        tty->print_cr("  step %d: sp=%p saved_fp=%p next_sp=%p",
-                      n, (void*)walk, (void*)(uintptr_t)saved_fp, (void*)next);
-        walk = next;
-      }
-    }
     guarantee(_post_Java_sp != NULL, "bad stack!");
     _last_Java_pc = (address) _post_Java_sp[ I7->sp_offset_in_saved_window()] + frame::pc_return_offset;
 

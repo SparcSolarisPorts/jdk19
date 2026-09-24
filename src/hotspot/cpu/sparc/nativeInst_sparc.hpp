@@ -315,8 +315,8 @@ class NativePostCallNop: public NativeInstruction {
 public:
   bool check() const { return false; }
   int displacement() const { return 0; }
-  void patch(jint diff) { ShouldNotCallThis(); }
-  void make_deopt() { ShouldNotCallThis(); }
+  void patch(jint diff) { Unimplemented(); }
+  void make_deopt() { Unimplemented(); }
 };
 
 inline NativePostCallNop* nativePostCallNop_at(address address) {
@@ -471,7 +471,11 @@ class NativeFarCall: public NativeInstruction {
     return call;
   }
 
-  friend NativeFarCall* nativeFarCall_overwriting_at(address instr, address destination);
+  friend inline NativeFarCall* nativeFarCall_overwriting_at(address instr, address destination) {
+    Unimplemented();
+    NativeFarCall* call = (NativeFarCall*)instr;
+    return call;
+  }
 
   friend NativeFarCall* nativeFarCall_before(address return_address) {
     NativeFarCall* call = (NativeFarCall*)(return_address - return_address_offset);
@@ -483,22 +487,12 @@ class NativeFarCall: public NativeInstruction {
 
   static bool is_call_at(address instr);
 
-  // Far-call insertion is supported; concurrent replacement of an installed
-  // far call is not.
-  static void insert(address code_pos, address entry);
+  // MT-safe patching of a call instruction.
+  static void insert(address code_pos, address entry) {
+    (void)nativeFarCall_overwriting_at(code_pos, entry);
+  }
   static void replace_mt_safe(address instr_addr, address code_buffer);
 };
-
-inline NativeFarCall* nativeFarCall_overwriting_at(address instr, address destination) {
-  if (destination != NULL) {
-    NativeFarCall::insert(instr, destination);
-  }
-  NativeFarCall* call = (NativeFarCall*)instr;
-#ifdef ASSERT
-  call->verify();
-#endif
-  return call;
-}
 
 
 // An interface for accessing/manipulating 32 bit native set_metadata imm, reg instructions

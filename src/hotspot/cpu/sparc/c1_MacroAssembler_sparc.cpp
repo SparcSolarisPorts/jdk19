@@ -52,9 +52,7 @@ void C1_MacroAssembler::inline_cache_check(Register receiver, Register iCache) {
 
 
 void C1_MacroAssembler::explicit_null_check(Register base) {
-  // Force a fault at the object address.  The load result is intentionally
-  // discarded; C1 records this instruction as the implicit null-check site.
-  ld_ptr(base, 0, G0);
+  Unimplemented();
 }
 
 

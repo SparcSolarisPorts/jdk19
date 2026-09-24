@@ -1070,7 +1070,7 @@ int SharedRuntime::c_calling_convention(const BasicType *sig_bt,
 int SharedRuntime::vector_calling_convention(VMRegPair *regs,
                                              uint num_bits,
                                              uint total_args_passed) {
-  ShouldNotCallThis(); // SPARC does not advertise a vector calling convention
+  Unimplemented();
   return 0;
 }
 
@@ -2388,9 +2388,6 @@ static void make_new_frames(MacroAssembler* masm, bool deopt) {
 // Ought to generate an ideal graph & compile, but here's some SPARC ASM
 // instead.
 void SharedRuntime::generate_deopt_blob() {
-#ifdef SPARC
-  tty->print_cr("[SPARC-DIAG] generating SPARC deopt blob");
-#endif
   // allocate space for the code
   ResourceMark rm;
   // setup code generation tools
@@ -2953,3 +2950,4 @@ RuntimeStub* SharedRuntime::generate_resolve_blob(address destination, const cha
   // frame_size_words or bytes??
   return RuntimeStub::new_runtime_stub(name, &buffer, frame_complete, frame_size_words, oop_maps, true);
 }
+
